@@ -4,13 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#10291b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Fincore">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="description" content="자산 가치와 현금 흐름을 기록하고 한눈에 확인하는 개인 Financial OS, Fincore.">
 <title>Fincore · 개인 Financial OS</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2310291b'/%3E%3Cg fill='none' stroke='%23c6dbb4' stroke-width='1'%3E%3Cellipse cx='16' cy='16' rx='12' ry='5'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='5' transform='rotate(60 16 16)'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='5' transform='rotate(120 16 16)'/%3E%3C/g%3E%3Crect x='13' y='13' width='6' height='6' fill='%23c6dbb4'/%3E%3C/svg%3E">
 <style>
 :root{
   --paper:#e6ecd6; --paper2:#d9e2c3; --card:#f3f6e6; --field:#fbfcf3;
-  --ink:#14261b; --ink2:#3c5446; --mute:#667b6b;
+  --ink:#14261b; --ink2:#3c5446; --mute:#53675a;
   --g900:#10291b; --g800:#1b4430; --g700:#2a5c40; --g600:#3d7552; --g500:#5f9a6d; --g300:#a3c493; --g200:#c6dbb4;
   --line:#a9bf9c; --red:#98362a; --brass:#a8873a;
   --serif:"Noto Serif KR","Nanum Myeongjo","AppleMyungjo","Batang","Times New Roman",serif;
@@ -41,6 +45,7 @@ svg{display:block}
 .rail-foot{padding:16px 22px 22px;font-size:12px;word-break:keep-all;color:rgba(230,236,214,.55);border-top:1px solid rgba(230,236,214,.2)}
 .topbar{display:none}
 main{padding:28px 36px 72px;max-width:1160px;width:100%}
+main:focus{outline:none}
 
 /* ---------- 페이지 상단 띠 ---------- */
 .band{position:relative;height:104px;border:1px solid var(--g900);background:
@@ -163,9 +168,12 @@ dialog::backdrop{background:rgba(16,41,27,.6)}
 .htable td:last-child{width:36px;text-align:right}
 .htable button{background:none;border:0;color:var(--red);cursor:pointer;padding:4px 8px;font-size:18px;line-height:1}
 
-.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--g900);color:var(--paper);padding:11px 20px;border:1px solid var(--g200);font-weight:600;font-size:14px;z-index:99;max-width:calc(100% - 32px)}
+.toast{word-break:keep-all;position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--g900);color:var(--paper);padding:11px 20px;border:1px solid var(--g200);font-weight:600;font-size:14px;z-index:99;max-width:calc(100% - 32px)}
 .toast[hidden]{display:none}
-.note{font-size:13px;color:var(--ink2);border-left:3px solid var(--brass);padding:4px 0 4px 12px;margin:0 0 14px}
+.note{word-break:keep-all;font-size:13px;color:var(--ink2);border-left:3px solid var(--brass);padding:4px 0 4px 12px;margin:0 0 14px}
+.note.warn{border-left-color:var(--red)}
+.remind{word-break:keep-all;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--brass);padding:10px 14px;margin:0 0 16px;font-size:14px}
+.htable small{display:block;font:400 11.5px var(--sans);color:var(--mute)}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;font-size:14px;margin:0}
 .kv dt{color:var(--mute)}.kv dd{margin:0}
 
@@ -213,13 +221,14 @@ dialog::backdrop{background:rgba(16,41,27,.6)}
       <span><b>FINCORE</b><small>개인 Financial OS</small></span>
     </a>
     <nav class="nav" id="nav" aria-label="주 메뉴"></nav>
-    <div class="rail-foot">알파 0.1<br>데이터는 이 기기의 브라우저에 저장됩니다.</div>
+    <div class="rail-foot">알파 0.2<br>데이터는 이 기기의 브라우저에 저장됩니다.</div>
   </aside>
   <main id="view" tabindex="-1"></main>
 </div>
 <dialog id="dlg"></dialog>
 <dialog id="dlg2"></dialog>
 <div class="toast" id="toast" role="status" hidden></div>
+<input type="file" id="imp" accept="application/json,.json" hidden>
 <noscript><p style="padding:24px">Fincore를 사용하려면 JavaScript가 필요합니다.</p></noscript>
 
 <script>
@@ -228,7 +237,8 @@ dialog::backdrop{background:rgba(16,41,27,.6)}
 
  구조 (확장 방법)
   · 저장소   : Store.load / Store.save 한 곳에서만 저장 방식을 다룹니다.
-               나중에 Supabase 같은 원격 저장소로 바꿀 때 이 객체만 교체하면 됩니다.
+               (원격 저장소로 바꾸려면 비동기 처리와 기록 단위 저장이 추가로 필요합니다.)
+               Store.normalize 가 읽어 온 모든 데이터를 검사·정리하므로, 렌더링 코드는 형식이 맞는 데이터만 받습니다.
   · 모듈     : defineModule({id,label,icon,render(el)})  → 메뉴와 화면이 자동으로 추가됩니다.
   · 위젯     : defineWidget({id,title,size,render(el)})  → 대시보드에 카드가 자동으로 추가됩니다.
   · 동작     : Actions['이름'] = fn   → HTML의 data-act="이름" 클릭에 연결됩니다.
@@ -251,8 +261,18 @@ function addDays(s, n) { const d = new Date(s + 'T00:00'); d.setDate(d.getDate()
 const mLabel = k => { const [y, m] = k.split('-'); return y + '년 ' + Number(m) + '월'; };
 const dLabel = d => Number(d.slice(5, 7)) + '월 ' + Number(d.slice(8)) + '일 (' + DAYS[new Date(d + 'T00:00').getDay()] + ')';
 const dShort = d => d.slice(2).replace(/-/g, '.');
-const validDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(new Date(s + 'T00:00'));
-const num = s => { const x = parseFloat(String(s).replace(/,/g, '').trim()); return isFinite(x) ? x : NaN; };
+const validDate = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(new Date(s + 'T00:00')) && ymd(new Date(s + 'T00:00')) === s;
+const daysBetween = (a, b) => Math.round((new Date(b + 'T00:00') - new Date(a + 'T00:00')) / 864e5);
+// 금액 입력: "1,234,000", "300만", "1억 2,000만", "1.5억", "5000원" 을 받고, 숫자가 아닌 글자가 섞이면 NaN
+function num(s) {
+  const t = String(s ?? '').replace(/[,\s원$₩]/g, '');
+  const m = /^(?:(\d+(?:\.\d+)?)억)?(?:(\d+(?:\.\d+)?)만)?(\d+(?:\.\d+)?)?$/.exec(t);
+  if (!t || !m || !(m[1] || m[2] || m[3])) return NaN;
+  const v = (m[1] ? +m[1] * 1e8 : 0) + (m[2] ? +m[2] * 1e4 : 0) + (m[3] ? +m[3] : 0);
+  return Math.round(v * 100) / 100;
+}
+const roundCur = (v, cur) => cur === 'USD' ? Math.round(v * 100) / 100 : Math.round(v);
+const toNum = x => typeof x === 'number' ? x : (typeof x === 'string' && x.trim() !== '' ? Number(x) : NaN);
 
 const nf = new Intl.NumberFormat('ko-KR');
 const nfUSD = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -270,7 +290,19 @@ function kor(n) {
   return (neg ? '-' : '') + s.trim() + '원';
 }
 const sgn = (n, f = kor) => (n > 0 ? '+' : n < 0 ? '-' : '') + f(Math.abs(n));
-const axis = (n, fine) => { const a = Math.abs(n), s = n < 0 ? '-' : ''; if (fine && a >= 1e4) return s + nf.format(Math.round(a / 1e4)) + '만'; if (a >= 1e8) return s + +(a / 1e8).toFixed(1) + '억'; if (a >= 1e4) return s + Math.round(a / 1e4) + '만'; return s + Math.round(a); };
+// 차트 눈금: 1·2·2.5·5 × 10^k 간격으로 딱 떨어지는 값
+function niceTicks(min, max, n) {
+  const span = max - min || Math.abs(max) || 1, raw = span / n, p = 10 ** Math.floor(Math.log10(raw)), f = raw / p;
+  const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+  const lo = Math.floor(min / step) * step, hi = Math.max(Math.ceil(max / step) * step, lo + step), ticks = [];
+  for (let v = lo; v <= hi + step / 2; v += step) ticks.push(+v.toPrecision(12));
+  return { lo, hi, step, ticks };
+}
+function tickFmt(v, step) {
+  const a = Math.abs(v), s = v < 0 ? '-' : '', u = a >= 1e8 ? [1e8, '억'] : a >= 1e4 ? [1e4, '만'] : [1, ''];
+  const dec = Math.min(2, (String(+(step / u[0]).toPrecision(6)).split('.')[1] || '').length);
+  return s + (a / u[0]).toLocaleString('ko-KR', { maximumFractionDigits: dec }) + u[1];
+}
 
 /* ---------- 설정값 ---------- */
 const KIND = {
@@ -286,59 +318,114 @@ const DEFAULT_CATS = {
 };
 
 /* ---------- 저장소 ---------- */
+const ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
+const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
 const Store = {
   KEY: 'fincore.v1',
-  fresh() { return { v: 1, settings: { usdkrw: 1400 }, cats: JSON.parse(JSON.stringify(DEFAULT_CATS)), assets: [], flows: [], ext: {} }; },
+  problem: null,     // 저장된 데이터를 읽지 못했을 때 { raw, reason } — 이때는 절대 덮어쓰지 않음
+  dropped: 0,        // normalize 가 형식이 맞지 않아 버린 기록 수
+  fresh() { return { v: 1, settings: { usdkrw: 1400, lastBackup: null }, cats: JSON.parse(JSON.stringify(DEFAULT_CATS)), assets: [], flows: [], ext: {} }; },
   load() {
-    try {
-      const r = JSON.parse(localStorage.getItem(this.KEY));
-      if (r && r.v === 1) return this.normalize(r);
-    } catch (e) {}
+    this.problem = null;
+    let raw;
+    try { raw = localStorage.getItem(this.KEY); } catch (e) { return this.fresh(); }
+    if (raw == null) return this.fresh();
+    let r;
+    try { r = JSON.parse(raw); } catch (e) { this.problem = { raw, reason: 'corrupt' }; return this.fresh(); }
+    if (isObj(r) && r.v === 1) return this.normalize(r);
+    this.problem = { raw, reason: isObj(r) && Number(r.v) > 1 ? 'newer' : 'corrupt' };
     return this.fresh();
   },
+  // 바깥에서 들어온 데이터(저장소·가져오기 파일)를 항목 단위로 검사해 새 객체로 만든다.
   normalize(r) {
-    const f = this.fresh();
-    r.settings = Object.assign(f.settings, r.settings || {});
-    r.cats = Object.assign(f.cats, r.cats || {});
-    r.assets = Array.isArray(r.assets) ? r.assets : [];
-    r.flows = Array.isArray(r.flows) ? r.flows : [];
-    r.ext = r.ext && typeof r.ext === 'object' ? r.ext : {};
-    r.assets.forEach(a => { a.h = Array.isArray(a.h) ? a.h : []; a.h.sort((x, y) => x.d < y.d ? -1 : x.d > y.d ? 1 : 0); if (!KIND[a.kind]) a.kind = 'etc'; if (a.cur !== 'USD') a.cur = 'KRW'; });
-    return r;
+    const f = this.fresh(), seen = new Set(), st = isObj(r.settings) ? r.settings : {};
+    let dropped = 0;
+    const cleanId = x => { const s = String(x ?? ''); if (ID_RE.test(s) && !seen.has(s)) { seen.add(s); return s; } let n; do n = uid(); while (seen.has(n)); seen.add(n); return n; };
+    const str = (x, max) => (typeof x === 'string' || typeof x === 'number' ? String(x) : '').trim().slice(0, max);
+    const rate = toNum(st.usdkrw);
+    const settings = { usdkrw: rate > 0 && isFinite(rate) ? rate : f.settings.usdkrw, lastBackup: validDate(st.lastBackup) ? st.lastBackup : null };
+    const cats = {};
+    for (const k of ['in', 'out']) {
+      const l = Array.isArray(r.cats?.[k]) ? [...new Set(r.cats[k].map(x => str(x, 20)).filter(Boolean))] : [];
+      cats[k] = l.length ? l : f.cats[k];
+    }
+    const assets = (Array.isArray(r.assets) ? r.assets : []).filter(a => isObj(a) || (dropped++, false)).map(a => {
+      const cur = a.cur === 'USD' ? 'USD' : 'KRW', byDate = new Map();
+      for (const e of Array.isArray(a.h) ? a.h : []) {
+        const v = isObj(e) ? toNum(e.v) : NaN, fx = isObj(e) ? toNum(e.fx) : NaN;
+        if (!isObj(e) || !validDate(e.d) || !isFinite(v) || v < 0) { dropped++; continue; }
+        byDate.set(e.d, cur === 'USD' && fx > 0 && isFinite(fx) ? { d: e.d, v, fx } : { d: e.d, v });
+      }
+      return { id: cleanId(a.id), name: str(a.name, 40) || '이름 없음', kind: KIND[a.kind] ? a.kind : 'etc', cur, note: str(a.note, 60), h: [...byDate.values()].sort((x, y) => x.d < y.d ? -1 : 1) };
+    });
+    const flows = (Array.isArray(r.flows) ? r.flows : []).filter(x => {
+      const ok = isObj(x) && validDate(x.d) && (x.type === 'in' || x.type === 'out') && toNum(x.amt) > 0 && isFinite(toNum(x.amt));
+      if (!ok) dropped++;
+      return ok;
+    }).map(x => ({ id: cleanId(x.id), t: isFinite(toNum(x.t)) ? toNum(x.t) : 0, type: x.type, d: x.d, amt: toNum(x.amt), cat: str(x.cat, 20) || '미분류', memo: str(x.memo, 60) }));
+    let ext = {};
+    try { ext = isObj(r.ext) ? JSON.parse(JSON.stringify(r.ext)) : {}; } catch (e) {}
+    this.dropped = dropped;
+    return { v: 1, settings, cats, assets, flows, ext };
   },
-  save(s) { try { localStorage.setItem(this.KEY, JSON.stringify(s)); return true; } catch (e) { return false; } }
+  save(s) {
+    if (this.problem) return false;
+    try { localStorage.setItem(this.KEY, JSON.stringify(s)); return true; } catch (e) { return false; }
+  }
 };
 let S = Store.load();
 function commit(msg) {
-  if (!Store.save(S)) toast('저장 공간을 쓸 수 없어 이번 변경은 새로고침하면 사라집니다.');
+  if (Store.problem) toast('저장된 데이터 문제를 먼저 해결해 주세요.');
+  else if (!Store.save(S)) toast('저장 공간을 쓸 수 없어 이번 변경은 새로고침하면 사라집니다.');
   else if (msg) toast(msg);
   render();
 }
+// 브라우저가 공간이 부족할 때 이 사이트 데이터를 지우지 않도록 요청 (허용 여부는 브라우저가 결정)
+const StorageInfo = { persisted: null };
+if (navigator.storage && navigator.storage.persisted) {
+  navigator.storage.persisted().then(p => p || (navigator.storage.persist ? navigator.storage.persist() : false)).then(p => { StorageInfo.persisted = !!p; }).catch(() => {});
+}
+const isIOSBrowser = () => (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) && !navigator.standalone;
 let toastTimer;
 function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2400); }
 
 /* ---------- 계산 ---------- */
-const toKRW = (v, cur) => cur === 'USD' ? v * (S.settings.usdkrw || 0) : v;
+// 달러 환산: fx(기록 당시 환율)를 주면 그 값을, 없으면 설정의 현재 환율을 쓴다.
+const toKRW = (v, cur, fx) => cur === 'USD' ? v * (fx || S.settings.usdkrw || 0) : v;
 const isDebt = a => KIND[a.kind].side === 'd';
 const valAt = (a, d) => { let r = null; for (const e of a.h) { if (e.d <= d) r = e; else break; } return r; };
-const curVal = a => a.h.length ? a.h[a.h.length - 1].v : 0;
+const curEntry = a => valAt(a, today());            // 미래 날짜 기록은 '현재 가치'에 넣지 않음
+const curVal = a => curEntry(a)?.v ?? 0;
+// 날짜 d 시점의 원화 가치. 오늘(또는 d 없음)은 현재 환율, 과거는 기록 당시 환율.
+const krwAt = (a, e, d) => toKRW(e.v, a.cur, d && d < today() ? e.fx : 0);
 function totals(d) {
   let A = 0, D = 0, any = false;
+  const at = d || today();
   for (const a of S.assets) {
-    const e = d ? valAt(a, d) : a.h[a.h.length - 1];
+    const e = valAt(a, at);
     if (!e) continue;
     any = true;
-    const v = toKRW(e.v, a.cur);
+    const v = krwAt(a, e, d);
     if (isDebt(a)) D += v; else A += v;
   }
   return { A, D, N: A - D, any };
 }
+// 두 날짜 모두 기록이 있는 항목끼리만 비교 (새로 등록한 계좌가 '증가'로 잡히지 않도록)
+function netChange(from) {
+  const t = today(); let d = 0, n = 0, skipped = 0;
+  for (const a of S.assets) {
+    const e0 = valAt(a, from), e1 = valAt(a, t);
+    if (!e1) continue;
+    if (!e0) { skipped++; continue; }
+    d += (isDebt(a) ? -1 : 1) * (krwAt(a, e1) - krwAt(a, e0, from)); n++;
+  }
+  return { d, n, skipped };
+}
 function timeline() {
-  const set = new Set();
-  S.assets.forEach(a => a.h.forEach(e => set.add(e.d)));
-  const t = today();
-  if (set.size && ![...set].some(d => d >= t)) set.add(t);
-  return [...set].sort().map(d => ({ d, v: totals(d).N }));
+  const set = new Set(), t = today();
+  S.assets.forEach(a => a.h.forEach(e => { if (e.d <= t) set.add(e.d); }));
+  if (set.size) set.add(t);
+  return [...set].sort().map(d => ({ d, v: totals(d === t ? undefined : d).N }));
 }
 const flowsOf = mk => S.flows.filter(f => f.d.slice(0, 7) === mk);
 const sumOf = (list, type) => list.filter(f => f.type === type).reduce((s, f) => s + f.amt, 0);
@@ -381,61 +468,101 @@ const panel = (title, inner, cls = '', right = '') => `<section class="panel ${c
 let chartSeq = 0;
 function lineChart(el, pts) {
   if (pts.length < 2) { el.innerHTML = '<p class="empty-s">가치 기록이 서로 다른 날짜로 2개 이상 쌓이면 추이 그래프가 나타납니다.</p>'; return; }
-  const w = Math.max(260, el.clientWidth || 600), h = w < 520 ? 170 : 210, L = 52, R = 14, T = 12, B = 26, id = 'hh' + (++chartSeq);
-  const t0 = +new Date(pts[0].d), t1 = +new Date(pts[pts.length - 1].d);
+  const w = Math.max(260, el.clientWidth || 600), h = w < 520 ? 170 : 210, L = 56, R = 14, T = 12, B = 26, id = 'hh' + (++chartSeq);
+  const ms = d => +new Date(d + 'T00:00');
+  const first = pts[0].d, last = pts[pts.length - 1].d, t0 = ms(first), t1 = ms(last);
   let min = Math.min(...pts.map(p => p.v)), max = Math.max(...pts.map(p => p.v));
-  if (min === max) { min -= 1; max += 1; }
-  const pd = (max - min) * 0.12; min -= pd; max += pd;
-  const X = d => L + (t1 === t0 ? 0 : (+new Date(d) - t0) / (t1 - t0)) * (w - L - R);
-  const Y = v => T + (1 - (v - min) / (max - min)) * (h - T - B);
+  if (min === max) { const pad = Math.abs(min) * 0.05 || 1; min -= pad; max += pad; }
+  const nt = niceTicks(min, max, 3);
+  const X = d => L + (t1 === t0 ? 0 : (ms(d) - t0) / (t1 - t0)) * (w - L - R);
+  const Y = v => T + (1 - (v - nt.lo) / (nt.hi - nt.lo)) * (h - T - B);
   let grid = '';
-  for (let i = 0; i < 4; i++) { const v = min + (max - min) * i / 3, y = Y(v); grid += `<line x1="${L}" x2="${w - R}" y1="${y}" y2="${y}" stroke="#a9bf9c" stroke-width="1" ${i ? 'stroke-dasharray="2 3"' : ''}/><text x="${L - 6}" y="${y + 4}" text-anchor="end">${axis(v, max - min < 3e8)}</text>`; }
+  nt.ticks.forEach((v, i) => { const y = Y(v).toFixed(1); grid += `<line x1="${L}" x2="${w - R}" y1="${y}" y2="${y}" stroke="#a9bf9c" stroke-width="1" ${i ? 'stroke-dasharray="2 3"' : ''}/><text x="${L - 6}" y="${+y + 4}" text-anchor="end">${tickFmt(v, nt.step)}</text>`; });
+  // x축: 매월 1일 눈금 (너무 많으면 건너뜀). 기간이 짧으면 처음·끝 날짜만.
+  let months = [];
+  for (let k = first.endsWith('-01') ? first.slice(0, 7) : addMonth(first.slice(0, 7), 1); k + '-01' <= last; k = addMonth(k, 1)) months.push(k);
+  const maxT = w < 520 ? 4 : 7, every = Math.ceil(months.length / maxT);
+  months = months.filter((_, i) => i % every === 0);
+  const xlab = months.length >= 2
+    ? months.map(k => `<line x1="${X(k + '-01').toFixed(1)}" x2="${X(k + '-01').toFixed(1)}" y1="${h - B}" y2="${h - B + 4}" stroke="#a9bf9c"/><text x="${X(k + '-01').toFixed(1)}" y="${h - 6}" text-anchor="middle">${esc(dShort(k + '-01').slice(0, 5))}</text>`).join('')
+    : `<text x="${L}" y="${h - 6}">${esc(dShort(first))}</text><text x="${w - R}" y="${h - 6}" text-anchor="end">${esc(dShort(last))}</text>`;
   const line = pts.map((p, i) => (i ? 'L' : 'M') + X(p.d).toFixed(1) + ' ' + Y(p.v).toFixed(1)).join(' ');
-  const area = line + ` L${X(pts[pts.length - 1].d).toFixed(1)} ${h - B} L${X(pts[0].d).toFixed(1)} ${h - B} Z`;
-  const dots = (pts.length <= 30 ? pts : [pts[pts.length - 1]]).map(p => `<rect x="${X(p.d) - 3}" y="${Y(p.v) - 3}" width="6" height="6" fill="#f3f6e6" stroke="#10291b" stroke-width="1.5"/>`).join('');
-  el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="순자산 추이 그래프">
+  const area = line + ` L${X(last).toFixed(1)} ${h - B} L${X(first).toFixed(1)} ${h - B} Z`;
+  // 점에 마우스를 올리면 날짜와 금액이 보이도록 <title> 을 단 넓은 투명 영역을 둔다.
+  const dots = (pts.length <= 60 ? pts : [pts[pts.length - 1]]).map(p => `<g><title>${esc(dShort(p.d))} · ${kor(p.v)}</title><circle cx="${X(p.d).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="10" fill="transparent"/><rect x="${(X(p.d) - 3).toFixed(1)}" y="${(Y(p.v) - 3).toFixed(1)}" width="6" height="6" fill="#f3f6e6" stroke="#10291b" stroke-width="1.5"/></g>`).join('');
+  el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="순자산 추이 그래프: ${esc(dShort(first))} ${kor(pts[0].v)}에서 ${esc(dShort(last))} ${kor(pts[pts.length - 1].v)}">
     <defs><pattern id="${id}" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#3d7552" stroke-width="1" opacity=".55"/></pattern></defs>
-    ${grid}<path d="${area}" fill="url(#${id})"/><path d="${line}" fill="none" stroke="#10291b" stroke-width="2"/>${dots}
-    <text x="${L}" y="${h - 6}">${dShort(pts[0].d)}</text><text x="${w - R}" y="${h - 6}" text-anchor="end">${dShort(pts[pts.length - 1].d)}</text></svg>`;
+    ${grid}<path d="${area}" fill="url(#${id})"/><path d="${line}" fill="none" stroke="#10291b" stroke-width="2"/>${dots}${xlab}</svg>`;
 }
 function barChart(el, months) {
   const w = Math.max(260, el.clientWidth || 500), h = 190, L = 46, R = 8, T = 10, B = 24;
-  const max = Math.max(1, ...months.flatMap(m => [m.inc, m.out])) * 1.1;
+  const nt = niceTicks(0, Math.max(1, ...months.flatMap(m => [m.inc, m.out])), 3), max = nt.hi;
   const gw = (w - L - R) / months.length, bw = Math.max(6, Math.min(24, gw * 0.3));
   const Y = v => T + (1 - v / max) * (h - T - B);
   let grid = '', bars = '';
-  for (let i = 0; i <= 3; i++) { const v = max * i / 3, y = Y(v); grid += `<line x1="${L}" x2="${w - R}" y1="${y}" y2="${y}" stroke="#a9bf9c" ${i ? 'stroke-dasharray="2 3"' : ''}/><text x="${L - 6}" y="${y + 4}" text-anchor="end">${axis(v)}</text>`; }
+  nt.ticks.forEach((v, i) => { const y = Y(v).toFixed(1); grid += `<line x1="${L}" x2="${w - R}" y1="${y}" y2="${y}" stroke="#a9bf9c" ${i ? 'stroke-dasharray="2 3"' : ''}/><text x="${L - 6}" y="${+y + 4}" text-anchor="end">${tickFmt(v, nt.step)}</text>`; });
   months.forEach((m, i) => {
-    const cx = L + gw * i + gw / 2, hi = Y(m.inc), ho = Y(m.out), base = h - B;
-    bars += `<rect x="${cx - bw - 1}" y="${hi}" width="${bw}" height="${Math.max(0, base - hi)}" fill="#2a5c40"/><rect x="${cx + 1}" y="${ho}" width="${bw}" height="${Math.max(0, base - ho)}" fill="#98362a"/><text x="${cx}" y="${h - 7}" text-anchor="middle">${Number(m.k.slice(5))}월</text>`;
+    const cx = L + gw * i + gw / 2, hi = Y(m.inc), ho = Y(m.out), base = h - B, mo = Number(m.k.slice(5)) + '월';
+    bars += `<rect x="${cx - bw - 1}" y="${hi}" width="${bw}" height="${Math.max(0, base - hi)}" fill="#2a5c40"><title>${mo} 수입 ${kor(m.inc)}</title></rect><rect x="${cx + 1}" y="${ho}" width="${bw}" height="${Math.max(0, base - ho)}" fill="#98362a"><title>${mo} 지출 ${kor(m.out)}</title></rect><text x="${cx}" y="${h - 7}" text-anchor="middle">${mo}</text>`;
   });
   el.innerHTML = `<div class="legend"><span><i style="background:#2a5c40"></i>수입</span><span><i style="background:#98362a"></i>지출</span></div><svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="월별 수입과 지출 막대 그래프">${grid}${bars}</svg>`;
 }
 function catBars(list) {
-  const rows = byCat(list);
+  let rows = byCat(list);
   if (!rows.length) return '<p class="empty-s">이 달의 지출 내역이 없습니다.</p>';
-  const top = rows[0][1];
-  return '<div class="hbars">' + rows.slice(0, 7).map(([c, v]) => `<div class="hb"><span>${esc(c)}</span><span class="track"><i style="width:${Math.max(2, v / top * 100)}%"></i></span><span>${kor(v)}</span></div>`).join('') + '</div>';
+  if (rows.length > 7) rows = [...rows.slice(0, 6), ['그 외 ' + (rows.length - 6) + '개 분류', rows.slice(6).reduce((s, r) => s + r[1], 0)]];
+  const top = Math.max(...rows.map(r => r[1]));
+  return '<div class="hbars">' + rows.map(([c, v]) => `<div class="hb"><span title="${esc(c)}">${esc(c)}</span><span class="track"><i style="width:${Math.max(2, v / top * 100)}%"></i></span><span>${kor(v)}</span></div>`).join('') + '</div>';
 }
 
 /* ---------- 목록 조각 ---------- */
 function flowRow(f) {
   const out = f.type === 'out';
-  return `<button class="row" data-act="flow-edit" data-id="${f.id}"><span><span class="t"><span class="tag ${out ? 'out' : ''}">${out ? '지출' : '수입'}</span>${esc(f.cat)}</span><span class="s">${esc(f.memo || dShort(f.d))}</span></span><span class="v ${out ? 'neg' : 'pos'}">${out ? '-' : '+'}${nf.format(Math.round(f.amt))}원</span></button>`;
+  return `<button class="row" data-act="flow-edit" data-id="${esc(f.id)}"><span><span class="t"><span class="tag ${out ? 'out' : ''}">${out ? '지출' : '수입'}</span>${esc(f.cat)}</span><span class="s">${esc(f.memo || dShort(f.d))}</span></span><span class="v ${out ? 'neg' : 'pos'}">${out ? '-' : '+'}${nf.format(Math.round(f.amt))}원</span></button>`;
 }
 function assetRow(a) {
-  const v = curVal(a), last = a.h[a.h.length - 1], krw = a.cur === 'USD';
-  return `<button class="row" data-act="asset-open" data-id="${a.id}"><span><span class="t">${esc(a.name)}</span><span class="s">${esc(a.note || (last ? dShort(last.d) + ' 기준' : '기록 없음'))}</span></span><span class="v ${isDebt(a) ? 'neg' : ''}">${fmt(v, a.cur)}${krw ? `<small>약 ${kor(toKRW(v, a.cur))}</small>` : (last && a.note ? `<small>${dShort(last.d)} 기준</small>` : '')}</span></button>`;
+  const last = curEntry(a), v = last ? last.v : 0, krw = a.cur === 'USD';
+  return `<button class="row" data-act="asset-open" data-id="${esc(a.id)}"><span><span class="t">${esc(a.name)}</span><span class="s">${esc(a.note || (last ? dShort(last.d) + ' 기준' : '기록 없음'))}</span></span><span class="v ${isDebt(a) ? 'neg' : ''}">${fmt(v, a.cur)}${krw ? `<small>약 ${kor(toKRW(v, a.cur))}</small>` : (last && a.note ? `<small>${dShort(last.d)} 기준</small>` : '')}</span></button>`;
 }
 function emptyBox(msg, btns) { return `<div class="empty"><p>${msg}</p><div class="acts" style="justify-content:center">${btns}</div></div>`; }
+
+/* ---------- 백업 안내 ---------- */
+const BACKUP_DAYS = 14;
+function lastBackupText() {
+  const b = S.settings.lastBackup;
+  if (!b) return '아직 없음';
+  const n = daysBetween(b, today());
+  return b.replace(/-/g, '.') + (n > 0 ? ` (${n}일 전)` : ' (오늘)');
+}
+function backupReminder() {
+  const b = S.settings.lastBackup;
+  if (!S.assets.length && !S.flows.length) return '';
+  if (b && daysBetween(b, today()) < BACKUP_DAYS) return '';
+  return `<div class="remind" role="note"><span>마지막 백업: <b>${lastBackupText()}</b> · 기록은 이 브라우저에만 저장되니 가끔 파일로 내보내 두세요.</span><button class="btn sm" data-act="export">지금 내보내기</button></div>`;
+}
+
+/* ---------- 저장 데이터를 읽지 못했을 때 ---------- */
+function recoveryView(el) {
+  const p = Store.problem;
+  const why = p.reason === 'newer'
+    ? '이 브라우저의 데이터는 더 새로운 버전의 Fincore에서 저장한 것이라 이 버전에서는 열 수 없습니다.'
+    : '이 브라우저에 저장된 Fincore 데이터를 읽을 수 없습니다. 내용이 손상됐을 수 있습니다.';
+  el.innerHTML = page('DATA CHECK', '데이터 확인 필요', panel('저장된 데이터', `<p class="note warn">${why}</p>
+    <p>저장된 원본은 <b>그대로 두었고</b>, 해결할 때까지 아무것도 덮어쓰지 않습니다.</p>
+    <ol style="padding-left:20px;margin:0 0 18px"><li>먼저 <b>원본 내려받기</b>로 파일을 보관해 두세요.</li><li>예전에 내보낸 백업 파일이 있다면 <b>백업 파일 가져오기</b>로 복구할 수 있습니다.</li><li>복구할 방법이 없으면 <b>새로 시작하기</b>를 누르세요. 이때도 원본 파일이 먼저 내려받아집니다.</li></ol>
+    <div class="acts" style="justify-content:flex-start"><button class="btn" data-act="raw-export">원본 내려받기</button><button class="btn ghost" data-act="import">백업 파일 가져오기</button><button class="btn danger" data-act="raw-reset">새로 시작하기</button></div>`));
+}
 
 /* =====================================================================
    위젯 (대시보드)
    ===================================================================== */
 defineWidget({ id: 'networth', title: '순자산', size: 'w12', order: 10, render(el) {
-  const t = totals(), tl = timeline(), ago = totals(addDays(today(), -30));
+  const t = totals(), tl = timeline(), c = netChange(addDays(today(), -30));
   let delta = '<div class="delta sub">30일 전 기록이 없어 비교할 수 없습니다.</div>';
-  if (ago.any) { const d = t.N - ago.N; delta = `<div class="delta ${d < 0 ? 'neg' : 'pos'}">30일 전보다 ${sgn(d)} ${d === 0 ? '' : d > 0 ? '▲' : '▼'}</div>`; }
+  if (c.n) {
+    delta = `<div class="delta ${c.d < 0 ? 'neg' : 'pos'}">30일 전보다 ${sgn(c.d)} ${c.d === 0 ? '' : c.d > 0 ? '▲' : '▼'}</div>`;
+    if (c.skipped) delta += `<div class="sub">30일 전 기록이 없는 ${c.skipped}개 항목은 비교에서 뺐습니다.</div>`;
+  }
   el.innerHTML = `<div class="nwtop"><div><div class="lbl">자산 - 부채</div><div class="big ${t.N < 0 ? 'neg' : ''}">${kor(t.N)}</div><div class="sub">${nf.format(Math.round(t.N))}원</div>${delta}</div>
     <div class="nwmini"><div><div class="lbl">자산</div><div class="mid">${kor(t.A)}</div></div><div><div class="lbl">부채</div><div class="mid neg">${kor(t.D)}</div></div></div></div><div class="chart"></div>`;
   lineChart($('.chart', el), tl);
@@ -445,8 +572,14 @@ defineWidget({ id: 'month', title: '이번 달 현금 흐름', size: 'w5', order
   const rate = i > 0 ? Math.round(n / i * 100) + '%' : '-';
   el.innerHTML = `<div class="stats c2"><div class="stat"><div class="lbl">수입</div><div class="mid pos">${kor(i)}</div></div><div class="stat"><div class="lbl">지출</div><div class="mid neg">${kor(o)}</div></div>
     <div class="stat"><div class="lbl">순현금흐름</div><div class="mid ${n < 0 ? 'neg' : 'pos'}">${sgn(n)}</div></div><div class="stat"><div class="lbl">저축률</div><div class="mid">${rate}</div></div></div>
-    <p class="sub" style="margin:10px 0 0">${mLabel(mk)} · ${l.length}건 기록</p>`;
+    <p class="sub" style="margin:10px 0 0">${mLabel(mk)} · ${l.length}건 기록</p>${samePeriodLastMonth(mk)}`;
 } });
+// 월초에 '이번 달' 숫자만 보면 적자처럼 보이므로 지난달 같은 기간을 함께 보여 준다.
+function samePeriodLastMonth(mk) {
+  const day = Number(today().slice(8)), pk = addMonth(mk, -1), pl = flowsOf(pk).filter(f => Number(f.d.slice(8)) <= day);
+  if (!flowsOf(pk).length) return '';
+  return `<p class="sub" style="margin:4px 0 0">지난달 1~${day}일: 수입 ${kor(sumOf(pl, 'in'))} · 지출 ${kor(sumOf(pl, 'out'))}</p>`;
+}
 defineWidget({ id: 'compose', title: '자산 구성', size: 'w7', order: 30, render(el) {
   const sums = {}; let total = 0;
   S.assets.filter(a => !isDebt(a)).forEach(a => { const v = toKRW(curVal(a), a.cur); sums[a.kind] = (sums[a.kind] || 0) + v; total += v; });
@@ -476,7 +609,7 @@ defineModule({ id: 'home', label: '대시보드', icon: 'home', order: 10, rende
     body = panel('시작하기', emptyBox('아직 기록이 없습니다. 자산이나 현금 흐름을 하나 추가해 보세요.',
       `<button class="btn" data-act="asset-new">${icon('plus')}자산·부채 추가</button><button class="btn" data-act="flow-new">${icon('plus')}내역 추가</button><button class="btn ghost" data-act="demo">예시 데이터로 둘러보기</button>`));
   } else {
-    body = '<div class="grid">' + WIDGETS.map(w => `<section class="panel ${w.size}" data-widget="${w.id}"><h3 class="ph"><span>${esc(w.title)}</span></h3><div class="wb"></div></section>`).join('') + '</div>';
+    body = backupReminder() + '<div class="grid">' + WIDGETS.map(w => `<section class="panel ${w.size}" data-widget="${w.id}"><h3 class="ph"><span>${esc(w.title)}</span></h3><div class="wb"></div></section>`).join('') + '</div>';
   }
   el.innerHTML = page('FINCORE · ' + today().replace(/-/g, '.'), '대시보드', body);
   WIDGETS.forEach(w => { const b = $(`[data-widget="${w.id}"] .wb`, el); if (b) w.render(b); });
@@ -521,19 +654,19 @@ defineModule({ id: 'flow', label: '현금 흐름', icon: 'flow', order: 30, rend
 defineModule({ id: 'settings', label: '설정', icon: 'settings', order: 90, render(el) {
   const body = `
   ${panel('환율·분류', `<form data-form="settings" novalidate>
-      <label class="f"><span>달러 환율 (1달러 = 원)</span><input name="usdkrw" inputmode="decimal" value="${esc(S.settings.usdkrw)}"><div class="hint">달러 자산을 원화로 합산할 때 쓰는 값입니다. 과거 기록에도 같은 환율이 적용됩니다.</div></label>
+      <label class="f"><span>달러 환율 (1달러 = 원)</span><input name="usdkrw" inputmode="decimal" value="${esc(S.settings.usdkrw)}"><div class="hint">현재 합계에 쓰는 환율입니다. 달러 자산의 가치를 기록하면 그때의 환율이 함께 저장되어, 과거 추이는 기록 당시 환율로 계산됩니다.</div></label>
       <label class="f"><span>수입 분류 (쉼표로 구분)</span><input name="cin" value="${esc(S.cats.in.join(', '))}"></label>
       <label class="f"><span>지출 분류 (쉼표로 구분)</span><input name="cout" value="${esc(S.cats.out.join(', '))}"></label>
       <p class="err"></p><div class="acts"><button class="btn" type="submit">저장</button></div></form>`)}
   ${panel('데이터', `<p class="note">모든 기록은 지금 사용하는 이 브라우저에만 저장됩니다. 다른 기기와 공유되지 않으니, 가끔 내보내기로 백업해 두세요.</p>
+      ${isIOSBrowser() ? '<p class="note warn">iPhone·iPad의 Safari는 이 사이트를 7일 넘게 열지 않으면 저장된 기록을 지울 수 있습니다. 공유 버튼 → <b>홈 화면에 추가</b>로 설치해서 쓰고, 백업도 자주 해 두세요.</p>' : ''}
       <div class="acts" style="justify-content:flex-start">
         <button class="btn ghost" data-act="export">내보내기 (JSON)</button>
-        <label class="btn ghost" style="cursor:pointer">가져오기<input type="file" id="imp" accept="application/json,.json" style="display:none"></label>
+        <button class="btn ghost" data-act="import">가져오기</button>
         <button class="btn ghost" data-act="demo">예시 데이터 불러오기</button>
         <button class="btn danger" data-act="wipe">모든 데이터 삭제</button></div>`)}
-  ${panel('정보', `<dl class="kv"><dt>버전</dt><dd>알파 0.1</dd><dt>자산 항목</dt><dd>${S.assets.length}개</dd><dt>현금 흐름 내역</dt><dd>${S.flows.length}건</dd></dl>`)}`;
+  ${panel('정보', `<dl class="kv"><dt>버전</dt><dd>알파 0.2</dd><dt>자산 항목</dt><dd>${S.assets.length}개</dd><dt>현금 흐름 내역</dt><dd>${S.flows.length}건</dd><dt>마지막 백업</dt><dd>${lastBackupText()}</dd><dt>저장소 보호</dt><dd>${StorageInfo.persisted === null ? '확인 중' : StorageInfo.persisted ? '켜짐 (브라우저가 임의로 지우지 않음)' : '꺼짐 (공간이 부족하면 브라우저가 지울 수 있음)'}</dd></dl>`)}`;
   el.innerHTML = page('SETTINGS', '설정', body);
-  const imp = $('#imp', el); if (imp) imp.onchange = importFile;
 } });
 
 /* =====================================================================
@@ -541,7 +674,8 @@ defineModule({ id: 'settings', label: '설정', icon: 'settings', order: 90, ren
    ===================================================================== */
 const dlg = $('#dlg'), dlg2 = $('#dlg2');
 function openDlg(title, body, d = dlg) {
-  d.innerHTML = `<div class="dh"><h2>${esc(title)}</h2><button class="x" type="button" data-act="close" aria-label="닫기">${icon('x')}</button></div><div class="db">${body}</div>`;
+  if (d === dlg) delete d.dataset.asset;
+  d.innerHTML =`<div class="dh"><h2>${esc(title)}</h2><button class="x" type="button" data-act="close" aria-label="닫기">${icon('x')}</button></div><div class="db">${body}</div>`;
   if (!d.open) d.showModal();
 }
 let confirmFn = null;
@@ -553,99 +687,154 @@ const money = (name, label, v = '', cur = 'KRW') => `<label class="f"><span>${la
 
 function assetForm(a) {
   const n = !a;
-  return `<form data-form="asset" novalidate><input type="hidden" name="id" value="${a ? a.id : ''}">
+  // 통화는 새로 만들 때만 고를 수 있다. 바꾸면 과거 기록 숫자의 의미가 통째로 바뀌기 때문.
+  return `<form data-form="asset" novalidate><input type="hidden" name="id" value="${a ? esc(a.id) : ''}">
     <label class="f"><span>이름</span><input name="name" maxlength="40" value="${esc(a?.name || '')}" placeholder="예: 생활비 통장" required></label>
     <div class="two"><label class="f"><span>종류</span><select name="kind">${Object.keys(KIND).map(k => `<option value="${k}" ${a?.kind === k ? 'selected' : ''}>${KIND[k].label}</option>`).join('')}</select></label>
-    <label class="f"><span>통화</span><select name="cur"><option value="KRW" ${a?.cur !== 'USD' ? 'selected' : ''}>원 (KRW)</option><option value="USD" ${a?.cur === 'USD' ? 'selected' : ''}>달러 (USD)</option></select></label></div>
-    ${n ? `<div class="two">${money('v', '현재 가치')}<label class="f"><span>기준일</span><input type="date" name="d" value="${today()}" required></label></div>` : ''}
+    <label class="f"><span>통화</span><select name="cur" ${n ? '' : 'disabled aria-describedby="cur-hint"'}><option value="KRW" ${a?.cur !== 'USD' ? 'selected' : ''}>원 (KRW)</option><option value="USD" ${a?.cur === 'USD' ? 'selected' : ''}>달러 (USD)</option></select>${n ? '' : '<div class="hint" id="cur-hint">통화는 바꿀 수 없습니다. 다른 통화라면 새 항목으로 추가하세요.</div>'}</label></div>
+    ${n ? `<div class="two">${money('v', '현재 가치')}<label class="f"><span>기준일</span><input type="date" name="d" value="${today()}" max="${today()}" required></label></div>` : ''}
     <label class="f"><span>메모 (선택)</span><input name="note" maxlength="60" value="${esc(a?.note || '')}"></label>
     ${n ? '<p class="hint" style="margin-top:-6px">부채는 갚아야 할 잔액을 양수로 입력하세요.</p>' : ''}
     <p class="err"></p><div class="acts"><button class="btn ghost" type="button" data-act="close">취소</button><button class="btn" type="submit">${n ? '추가' : '저장'}</button></div></form>`;
 }
 function openAsset(id) {
-  const a = S.assets.find(x => x.id === id); if (!a) { dlg.close(); return; }
-  const rows = [...a.h].map((e, i) => ({ e, i })).reverse().map(({ e, i }) => `<tr><td>${e.d}</td><td>${fmt(e.v, a.cur)}</td><td><button data-act="val-del" data-id="${a.id}" data-i="${i}" aria-label="이 기록 삭제">×</button></td></tr>`).join('');
-  openDlg(a.name, `<div class="lbl">${KIND[a.kind].label} · ${a.cur === 'USD' ? '달러' : '원화'}</div><div class="big ${isDebt(a) ? 'neg' : ''}" style="font-size:32px">${fmt(curVal(a), a.cur)}</div>${a.cur === 'USD' ? `<div class="sub">약 ${kor(toKRW(curVal(a), a.cur))}</div>` : ''}
+  const a = S.assets.find(x => x.id === id); if (!a) { if (dlg.open) dlg.close(); return; }
+  const id_ = esc(a.id), usd = a.cur === 'USD';
+  const rows = [...a.h].map((e, i) => ({ e, i })).reverse().map(({ e, i }) => `<tr><td>${esc(e.d)}${e.d > today() ? '<small>미래 날짜</small>' : ''}</td><td>${fmt(e.v, a.cur)}${usd && e.fx ? `<small>@${nf.format(e.fx)}원</small>` : ''}</td><td><button data-act="val-del" data-id="${id_}" data-d="${esc(e.d)}" aria-label="${esc(e.d)} 기록 삭제">×</button></td></tr>`).join('');
+  openDlg(a.name, `<div class="lbl">${KIND[a.kind].label} · ${usd ? '달러' : '원화'}</div><div class="big ${isDebt(a) ? 'neg' : ''}" style="font-size:32px">${fmt(curVal(a), a.cur)}</div>${usd ? `<div class="sub">약 ${kor(toKRW(curVal(a), a.cur))} (현재 환율 ${nf.format(S.settings.usdkrw)}원)</div>` : ''}
     <h3 class="ph" style="margin-top:20px"><span>가치 기록</span></h3>
     ${a.h.length ? `<table class="htable"><tbody>${rows}</tbody></table>` : '<p class="empty-s">기록이 없습니다.</p>'}
-    <form data-form="val" novalidate><input type="hidden" name="id" value="${a.id}"><input type="hidden" name="cur" value="${a.cur}"><div class="two">${money('v', '새 가치')}<label class="f"><span>기준일</span><input type="date" name="d" value="${today()}" required></label></div>
-    <p class="err"></p><div class="acts"><button class="btn danger sp" type="button" data-act="asset-del" data-id="${a.id}">삭제</button><button class="btn ghost" type="button" data-act="asset-edit" data-id="${a.id}">정보 수정</button><button class="btn" type="submit">기록 추가</button></div></form>`);
+    <form data-form="val" novalidate><input type="hidden" name="id" value="${id_}"><input type="hidden" name="cur" value="${a.cur}"><div class="two">${money('v', '새 가치')}<label class="f"><span>기준일</span><input type="date" name="d" value="${today()}" max="${today()}" required></label></div>
+    <p class="err"></p><div class="acts"><button class="btn danger sp" type="button" data-act="asset-del" data-id="${id_}">삭제</button><button class="btn ghost" type="button" data-act="asset-edit" data-id="${id_}">정보 수정</button><button class="btn" type="submit">기록 추가</button></div></form>`);
+  dlg.dataset.asset = a.id;
 }
 function flowForm(f) {
   const n = !f, type = f?.type || 'out', cats = S.cats[type];
-  return `<form data-form="flow" novalidate><input type="hidden" name="id" value="${f ? f.id : ''}">
+  return `<form data-form="flow" novalidate><input type="hidden" name="id" value="${f ? esc(f.id) : ''}">
     <div class="f" style="margin-bottom:14px"><span class="lbl" style="display:block;margin-bottom:5px;color:var(--g700);font-weight:700;letter-spacing:.1em;font-size:12px">구분</span><div class="seg"><label class="out"><input type="radio" name="type" value="out" ${type === 'out' ? 'checked' : ''}>지출</label><label><input type="radio" name="type" value="in" ${type === 'in' ? 'checked' : ''}>수입</label></div></div>
-    <div class="two">${money('amt', '금액 (원)', f ? f.amt : '')}<label class="f"><span>날짜</span><input type="date" name="d" value="${f ? f.d : (UI.month === today().slice(0, 7) ? today() : UI.month + '-01')}" required></label></div>
+    <div class="two">${money('amt', '금액 (원)', f ? f.amt : '')}<label class="f"><span>날짜</span><input type="date" name="d" value="${esc(f ? f.d : (UI.month === today().slice(0, 7) ? today() : UI.month + '-01'))}" required></label></div>
     <label class="f"><span>분류</span><input name="cat" list="catlist" maxlength="20" value="${esc(f?.cat || '')}" placeholder="목록에서 고르거나 직접 입력" autocomplete="off"><datalist id="catlist">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
     <label class="f"><span>메모 (선택)</span><input name="memo" maxlength="60" value="${esc(f?.memo || '')}"></label>
-    <p class="err"></p><div class="acts">${n ? '' : '<button class="btn danger sp" type="button" data-act="flow-del" data-id="' + f.id + '">삭제</button>'}<button class="btn ghost" type="button" data-act="close">취소</button><button class="btn" type="submit">${n ? '추가' : '저장'}</button></div></form>`;
+    <p class="err"></p><div class="acts">${n ? '' : '<button class="btn danger sp" type="button" data-act="flow-del" data-id="' + esc(f.id) + '">삭제</button>'}<button class="btn ghost" type="button" data-act="close">취소</button><button class="btn" type="submit">${n ? '추가' : '저장'}</button></div></form>`;
 }
 
 /* ---------- 동작 ---------- */
+// 다른 탭에서 지워졌거나 찾을 수 없는 항목을 다루려 할 때
+const gone = () => { if (dlg.open) dlg.close(); toast('이미 삭제된 항목입니다.'); render(); };
+const stamp = () => today().replace(/-/g, '');
+function download(name, text) {
+  const b = new Blob([text], { type: 'application/json' }), a = document.createElement('a');
+  a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function exportNow(quiet) {
+  S.settings.lastBackup = today();
+  download('fincore-' + stamp() + '.json', JSON.stringify(S, null, 2));
+  Store.save(S);
+  if (!quiet) { toast('백업 파일을 내려받았습니다.'); render(); }
+}
+// 기록을 통째로 바꾸거나 지우기 직전에 지금 상태를 파일로 남긴다.
+const safetyBackup = () => { if (S.assets.length || S.flows.length) exportNow(true); };
+const SAFETY_NOTE = '<br><span class="sub">진행하기 직전에 지금 기록을 백업 파일로 자동 내려받습니다.</span>';
+const RAW_NOTE = '<br><span class="sub">진행하기 직전에 저장돼 있던 원본을 파일로 자동 내려받습니다.</span>';
+
 Object.assign(Actions, {
   close(d, t) { const x = t.closest('dialog'); if (x) x.close(); },
   'confirm-yes'() { const f = confirmFn; confirmFn = null; dlg2.close(); if (f) f(); },
   'asset-new'() { openDlg('자산·부채 추가', assetForm(null)); },
   'asset-open'(d) { openAsset(d.id); },
-  'asset-edit'(d) { openDlg('정보 수정', assetForm(S.assets.find(a => a.id === d.id))); },
-  'asset-del'(d) { const a = S.assets.find(x => x.id === d.id); askConfirm(`'${esc(a.name)}'과(와) 모든 가치 기록을 삭제할까요?`, () => { S.assets = S.assets.filter(x => x.id !== d.id); dlg.close(); commit('삭제했습니다.'); }); },
-  'val-del'(d) { const a = S.assets.find(x => x.id === d.id); a.h.splice(Number(d.i), 1); Store.save(S); render(); openAsset(a.id); },
+  'asset-edit'(d) { const a = S.assets.find(x => x.id === d.id); if (!a) return gone(); openDlg('정보 수정', assetForm(a)); },
+  'asset-del'(d) {
+    const id = d.id, a = S.assets.find(x => x.id === id); if (!a) return gone();
+    askConfirm(`'${esc(a.name)}'과(와) 모든 가치 기록을 삭제할까요?`, () => { S.assets = S.assets.filter(x => x.id !== id); dlg.close(); commit('삭제했습니다.'); });
+  },
+  'val-del'(d) {
+    const id = d.id, day = d.d, a = S.assets.find(x => x.id === id); if (!a) return gone();
+    const e = a.h.find(x => x.d === day); if (!e) return openAsset(id);
+    askConfirm(`${esc(day)} 기록(${fmt(e.v, a.cur)})을 삭제할까요?`, () => {
+      const b = S.assets.find(x => x.id === id); if (!b) return gone();
+      b.h = b.h.filter(x => x.d !== day); commit('기록을 삭제했습니다.'); openAsset(id);
+    });
+  },
   'flow-new'() { openDlg('현금 흐름 추가', flowForm(null)); },
-  'flow-edit'(d) { openDlg('내역 수정', flowForm(S.flows.find(f => f.id === d.id))); },
-  'flow-del'(d) { S.flows = S.flows.filter(f => f.id !== d.id); dlg.close(); commit('삭제했습니다.'); },
+  'flow-edit'(d) { const f = S.flows.find(x => x.id === d.id); if (!f) return gone(); openDlg('내역 수정', flowForm(f)); },
+  'flow-del'(d) { const id = d.id; askConfirm('이 내역을 삭제할까요?', () => { S.flows = S.flows.filter(f => f.id !== id); dlg.close(); commit('삭제했습니다.'); }); },
   month(d) { UI.month = addMonth(UI.month, Number(d.d)); render(); },
   ftype(d) { UI.ftype = d.v; render(); },
-  export() {
-    const b = new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' }), a = document.createElement('a');
-    a.href = URL.createObjectURL(b); a.download = 'fincore-' + today().replace(/-/g, '') + '.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  },
-  wipe() { askConfirm('모든 자산과 현금 흐름 기록을 지웁니다. 되돌릴 수 없습니다.', () => { S = Store.fresh(); commit('모든 데이터를 삭제했습니다.'); }, '모두 삭제'); },
+  export() { exportNow(); },
+  import() { $('#imp').click(); },
+  wipe() { askConfirm('모든 자산과 현금 흐름 기록을 지웁니다.' + SAFETY_NOTE, () => { safetyBackup(); S = Store.fresh(); commit('모든 데이터를 삭제했습니다.'); }, '모두 삭제'); },
   demo() {
     const run = () => { S = demoData(); commit('예시 데이터를 불러왔습니다.'); };
-    if (S.assets.length || S.flows.length) askConfirm('현재 기록이 예시 데이터로 바뀝니다. 계속할까요?', run, '바꾸기'); else run();
+    if (S.assets.length || S.flows.length) askConfirm('현재 기록이 예시 데이터로 바뀝니다.' + SAFETY_NOTE, () => { safetyBackup(); run(); }, '바꾸기'); else run();
+  },
+  'raw-export'() { if (Store.problem) download('fincore-original-' + stamp() + '.json', Store.problem.raw); },
+  'raw-reset'() {
+    askConfirm('저장돼 있던 원본을 지우고 빈 상태로 새로 시작합니다.' + RAW_NOTE, () => {
+      Actions['raw-export'](); Store.problem = null; S = Store.fresh(); commit('새로 시작했습니다.');
+    }, '새로 시작');
   }
 });
 function importFile(e) {
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader();
   r.onload = () => {
-    try {
-      const j = JSON.parse(r.result);
-      if (!j || j.v !== 1 || !Array.isArray(j.assets) || !Array.isArray(j.flows)) throw 0;
-      askConfirm('현재 기록이 가져온 파일의 내용으로 바뀝니다. 계속할까요?', () => { S = Store.normalize(j); commit('가져왔습니다.'); }, '바꾸기');
-    } catch (x) { toast('올바른 Fincore 백업 파일이 아닙니다.'); }
     e.target.value = '';
+    const bad = () => toast('올바른 Fincore 백업 파일이 아닙니다.');
+    let j;
+    try { j = JSON.parse(r.result); } catch (x) { return bad(); }
+    if (!isObj(j) || !Array.isArray(j.assets) || !Array.isArray(j.flows)) return bad();
+    if (j.v !== 1) return Number(j.v) > 1 ? toast('더 새로운 버전에서 만든 백업이라 가져올 수 없습니다.') : bad();
+    const next = Store.normalize(j), dropped = Store.dropped, has = S.assets.length || S.flows.length;
+    let msg = `가져올 파일: 자산·부채 ${next.assets.length}개, 현금 흐름 ${next.flows.length}건`;
+    if (dropped) msg += `<br><span class="neg">형식이 맞지 않는 기록 ${dropped}개는 제외됩니다.</span>`;
+    if (Store.problem) msg += '<br>저장돼 있던 원본이 이 내용으로 바뀝니다.' + RAW_NOTE;
+    else if (has) msg += '<br>현재 기록이 이 내용으로 바뀝니다.' + SAFETY_NOTE;
+    askConfirm(msg, () => {
+      if (Store.problem) { Actions['raw-export'](); Store.problem = null; } else if (has) safetyBackup();
+      S = next; commit(dropped ? `가져왔습니다. 형식이 맞지 않는 기록 ${dropped}개는 제외했습니다.` : '가져왔습니다.');
+    }, '가져오기');
   };
   r.readAsText(f);
 }
+$('#imp').onchange = importFile;
 
 /* ---------- 폼 처리 ---------- */
 const fail = (f, m) => { const p = $('.err', f); if (p) p.textContent = m; };
+// 가치 기록 한 건. 달러 자산은 기록할 때 설정돼 있던 환율(fx)을 함께 남긴다.
+const entry = (v, d, cur) => cur === 'USD' ? { d, v: roundCur(v, cur), fx: S.settings.usdkrw } : { d, v: roundCur(v, cur) };
+const VAL_ERR = '가치를 0 이상의 숫자로 입력하세요. (예: 3000000, 300만, 1억 2000만)';
 Object.assign(Forms, {
   asset(f, fd) {
-    const name = fd.get('name').trim(), id = fd.get('id'), kind = fd.get('kind'), cur = fd.get('cur'), note = (fd.get('note') || '').trim();
+    const name = String(fd.get('name') || '').trim(), id = fd.get('id'), kind = KIND[fd.get('kind')] ? fd.get('kind') : 'etc', note = String(fd.get('note') || '').trim();
     if (!name) return fail(f, '이름을 입력하세요.');
-    if (id) { const a = S.assets.find(x => x.id === id); Object.assign(a, { name, kind, cur, note }); dlg.close(); commit('저장했습니다.'); return; }
-    const v = num(fd.get('v')), d = fd.get('d');
-    if (isNaN(v) || v < 0) return fail(f, '가치를 0 이상의 숫자로 입력하세요.');
+    if (id) { // 정보 수정: 통화는 바꾸지 않는다
+      const a = S.assets.find(x => x.id === id); if (!a) return gone();
+      Object.assign(a, { name, kind, note }); dlg.close(); commit('저장했습니다.'); return;
+    }
+    const cur = fd.get('cur') === 'USD' ? 'USD' : 'KRW', v = num(fd.get('v')), d = fd.get('d');
+    if (isNaN(v) || v < 0) return fail(f, VAL_ERR);
     if (!validDate(d)) return fail(f, '기준일을 확인하세요.');
-    S.assets.push({ id: uid(), name, kind, cur, note, h: [{ d, v }] });
+    if (d > today()) return fail(f, '기준일은 오늘보다 뒤일 수 없습니다.');
+    S.assets.push({ id: uid(), name, kind, cur, note, h: [entry(v, d, cur)] });
     dlg.close(); commit('추가했습니다.');
   },
   val(f, fd) {
-    const a = S.assets.find(x => x.id === fd.get('id')), v = num(fd.get('v')), d = fd.get('d');
-    if (isNaN(v) || v < 0) return fail(f, '가치를 0 이상의 숫자로 입력하세요.');
+    const a = S.assets.find(x => x.id === fd.get('id')); if (!a) return gone();
+    const v = num(fd.get('v')), d = fd.get('d');
+    if (isNaN(v) || v < 0) return fail(f, VAL_ERR);
     if (!validDate(d)) return fail(f, '기준일을 확인하세요.');
-    const same = a.h.find(e => e.d === d);
-    if (same) same.v = v; else { a.h.push({ d, v }); a.h.sort((x, y) => x.d < y.d ? -1 : 1); }
-    Store.save(S); render(); openAsset(a.id); toast('기록했습니다.');
+    if (d > today()) return fail(f, '기준일은 오늘보다 뒤일 수 없습니다.');
+    const e = entry(v, d, a.cur), i = a.h.findIndex(x => x.d === d);
+    if (i >= 0) a.h[i] = e; else { a.h.push(e); a.h.sort((x, y) => x.d < y.d ? -1 : 1); }
+    commit(i >= 0 ? '같은 날짜의 기록을 새 값으로 바꿨습니다.' : '기록했습니다.'); openAsset(a.id);
   },
   flow(f, fd) {
-    const amt = num(fd.get('amt')), d = fd.get('d'), id = fd.get('id'), type = fd.get('type');
-    if (isNaN(amt) || amt <= 0) return fail(f, '금액을 0보다 큰 숫자로 입력하세요.');
+    const amt = Math.round(num(fd.get('amt'))), d = fd.get('d'), id = fd.get('id'), type = fd.get('type') === 'in' ? 'in' : 'out';
+    if (!(amt > 0)) return fail(f, '금액을 0보다 큰 숫자로 입력하세요. (예: 12000, 3만)');
     if (!validDate(d)) return fail(f, '날짜를 확인하세요.');
-    const rec = { type, d, amt, cat: (fd.get('cat') || '').trim() || '미분류', memo: (fd.get('memo') || '').trim() };
-    if (id) Object.assign(S.flows.find(x => x.id === id), rec); else S.flows.push(Object.assign({ id: uid(), t: Date.now() }, rec));
+    const rec = { type, d, amt, cat: String(fd.get('cat') || '').trim() || '미분류', memo: String(fd.get('memo') || '').trim() };
+    if (id) { const x = S.flows.find(y => y.id === id); if (!x) return gone(); Object.assign(x, rec); }
+    else S.flows.push(Object.assign({ id: uid(), t: Date.now() }, rec));
     UI.month = d.slice(0, 7); dlg.close(); commit(id ? '저장했습니다.' : '추가했습니다.');
   },
   settings(f, fd) {
@@ -662,7 +851,7 @@ Object.assign(Forms, {
 document.addEventListener('input', e => {
   const t = e.target; if (!t.matches || !t.matches('[data-money]')) return;
   const f = t.form, cur = f.elements.cur ? f.elements.cur.value : 'KRW', h = $(`[data-hint="${t.dataset.money}"]`, f), v = num(t.value);
-  h.textContent = t.value.trim() === '' || isNaN(v) ? '' : '= ' + (cur === 'USD' ? fmtUSD(v) : kor(v));
+  h.textContent = t.value.trim() === '' ? '' : isNaN(v) ? '숫자로 읽을 수 없습니다. (예: 3000000, 300만)' : '= ' + (cur === 'USD' ? fmtUSD(v) : kor(v));
 });
 document.addEventListener('change', e => {
   const t = e.target;
@@ -673,37 +862,57 @@ document.addEventListener('submit', e => {
   const f = e.target.closest('form[data-form]'); if (!f) return;
   e.preventDefault(); const fn = Forms[f.dataset.form]; if (fn) fn(f, new FormData(f));
 });
+// 대화상자 바깥(배경)을 눌렀다 뗐을 때만 닫는다. 입력칸에서 드래그하다 바깥에서 놓은 경우는 닫지 않음.
+let downOn = null;
+document.addEventListener('pointerdown', e => { downOn = e.target; }, true);
 document.addEventListener('click', e => {
   const nav = e.target.closest('a[data-nav]');
   if (nav) { e.preventDefault(); go(nav.dataset.nav); return; }
-  if (e.target === dlg || e.target === dlg2) { e.target.close(); return; }
+  if ((e.target === dlg || e.target === dlg2) && downOn === e.target) { e.target.close(); return; }
   const t = e.target.closest('[data-act]'); if (!t) return;
   const fn = Actions[t.dataset.act]; if (fn) fn(t.dataset, t, e);
 });
 
 /* ---------- 라우터 ---------- */
 function curPage() { const p = new URLSearchParams(location.search).get('p'); return MODULES.some(m => m.id === p) ? p : 'home'; }
-function go(p) { history.pushState(null, '', p === 'home' ? location.pathname : '?p=' + p); render(); window.scrollTo(0, 0); }
-addEventListener('popstate', render);
-function render() {
-  const p = curPage(), m = MODULES.find(x => x.id === p), y = window.scrollY;
-  $('#nav').innerHTML = MODULES.map(x => `<a href="${x.id === 'home' ? location.pathname : '?p=' + x.id}" data-nav="${x.id}" ${x.id === p ? 'aria-current="page"' : ''}>${icon(x.icon)}<span>${esc(x.label)}</span></a>`).join('');
-  m.render($('#view'));
-  document.title = (p === 'home' ? '' : m.label + ' · ') + 'Fincore · 개인 Financial OS';
-  window.scrollTo(0, y);
+function go(p) { history.pushState(null, '', p === 'home' ? location.pathname : '?p=' + p); render(); window.scrollTo(0, 0); $('#view').focus({ preventScroll: true }); }
+addEventListener('popstate', () => render());
+// 화면을 통째로 다시 그려도 키보드 포커스가 같은 버튼·입력칸으로 돌아오도록 위치를 기억한다.
+function focusSel() {
+  const el = document.activeElement, v = $('#view');
+  if (!el || el === document.body || el === v) return null;
+  if (el.dataset && el.dataset.nav && $('#nav').contains(el)) return `#nav [data-nav="${CSS.escape(el.dataset.nav)}"]`;
+  if (!v.contains(el)) return null;
+  const s = ['act', 'id', 'v', 'd'].filter(k => el.dataset[k] != null).map(k => `[data-${k}="${CSS.escape(el.dataset[k])}"]`).join('');
+  return s ? '#view ' + s : el.name ? `#view [name="${CSS.escape(el.name)}"]` : '#view';
 }
+function render() {
+  const sel = focusSel(), p = curPage(), m = MODULES.find(x => x.id === p), y = window.scrollY;
+  $('#nav').innerHTML = MODULES.map(x => `<a href="${x.id === 'home' ? location.pathname : '?p=' + x.id}" data-nav="${x.id}" ${x.id === p ? 'aria-current="page"' : ''}>${icon(x.icon)}<span>${esc(x.label)}</span></a>`).join('');
+  if (Store.problem) recoveryView($('#view')); else m.render($('#view'));
+  document.title = (Store.problem ? '데이터 확인 필요 · ' : p === 'home' ? '' : m.label + ' · ') + 'Fincore · 개인 Financial OS';
+  window.scrollTo(0, y);
+  if (sel) ($(sel) || $('#view')).focus({ preventScroll: true });
+}
+// 다른 탭에서 저장하면 이 탭의 데이터도 다시 읽는다. (오래된 데이터로 덮어쓰는 것 방지)
+addEventListener('storage', e => {
+  if (e.key !== Store.KEY && e.key !== null) return;
+  S = Store.load(); render();
+  if (dlg.open && dlg.dataset.asset) openAsset(dlg.dataset.asset);
+  toast('다른 탭에서 바뀐 내용을 반영했습니다.');
+});
 let lastW = innerWidth, rt;
 addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (innerWidth !== lastW) { lastW = innerWidth; render(); } }, 160); });
 
 /* ---------- 예시 데이터 ---------- */
 function demoData() {
   const s = Store.fresh(), t = today(), cur = t.slice(0, 7);
-  const series = (name, kind, c, vals, note) => ({ id: uid(), name, kind, cur: c, note: note || '', h: vals.map((v, i) => ({ d: addMonth(cur, i - (vals.length - 1)) + '-01', v })).filter(e => e.d <= t) });
+  const series = (name, kind, c, vals, note, fxs) => ({ id: uid(), name, kind, cur: c, note: note || '', h: vals.map((v, i) => Object.assign({ d: addMonth(cur, i - (vals.length - 1)) + '-01', v }, fxs ? { fx: fxs[i] } : {})).filter(e => e.d <= t) });
   s.assets.push(
     series('생활비 통장', 'cash', 'KRW', [2100000, 1800000, 2600000, 2200000, 2900000, 3100000]),
     series('비상금 예금', 'cash', 'KRW', [8000000, 8000000, 9000000, 9000000, 10000000, 10000000], '연 3.5%'),
     series('국내 주식', 'invest', 'KRW', [12000000, 12800000, 12100000, 13500000, 14200000, 15100000]),
-    series('미국 ETF', 'invest', 'USD', [4200, 4350, 4180, 4600, 4720, 4890]),
+    series('미국 ETF', 'invest', 'USD', [4200, 4350, 4180, 4600, 4720, 4890], '', [1368, 1382, 1371, 1390, 1405, 1396]),
     series('전세 보증금', 'realty', 'KRW', [150000000, 150000000, 150000000, 150000000, 150000000, 150000000], '임대차 계약 기준'),
     series('학자금 대출', 'debt', 'KRW', [18000000, 17500000, 17000000, 16500000, 16000000, 15500000])
   );
