@@ -112,16 +112,22 @@ main:focus{outline:none}
 .row .v small{display:block;font:400 12px var(--sans);color:var(--mute)}
 div.f{margin:0 0 14px}
 .fl{display:block;font-size:12px;font-weight:700;letter-spacing:.1em;color:var(--g700);margin-bottom:5px}
-.chips{display:flex;flex-wrap:wrap;gap:8px}
-.chips label{position:relative;display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border:1px solid var(--g700);background:var(--field);cursor:pointer;font-size:14px;font-weight:600;color:var(--g800);margin:0}
-.chips label:hover{background:var(--paper2)}
-.chips input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;min-height:0;padding:0;border:0}
-.chips label:has(input:checked){background:var(--g800);border-color:var(--g900);color:var(--paper)}
-.chips.out label:has(input:checked){background:var(--red);border-color:var(--red)}
-.chips label:has(input:focus-visible){outline:2px solid var(--brass);outline-offset:2px}
-.chips label.add{border-style:dashed}
-.catnew{display:none;margin-top:10px}
-.chips:has(input[value="__new"]:checked) + .catnew{display:block}
+.pick{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:44px;padding:9px 12px;background:var(--field);border:1px solid var(--g700);cursor:pointer;font-size:16px;text-align:left;color:var(--ink)}
+.pick .pv.none{color:var(--mute)}
+.pick svg{width:14px;height:14px;flex:none;transition:transform .12s}
+.pick[aria-expanded=true]{background:var(--paper2)}
+.pick[aria-expanded=true] svg{transform:rotate(180deg)}
+.picklist{list-style:none;margin:6px 0 0;padding:0;border:1px solid var(--g700);background:var(--field);max-height:260px;overflow-y:auto;overscroll-behavior:contain}
+.picklist[hidden],.catnew[hidden]{display:none}
+.picklist li{border-bottom:1px solid var(--line)}
+.picklist li:last-child{border-bottom:0}
+.picklist button{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:44px;padding:0 14px;background:transparent;border:0;cursor:pointer;font-size:15px;text-align:left;color:var(--ink)}
+.picklist button:hover{background:var(--paper2)}
+.picklist button[aria-selected=true]{background:var(--g800);color:var(--paper);font-weight:700}
+.picklist button[aria-selected=true]::after{content:"\2713"}
+.out .picklist button[aria-selected=true]{background:var(--red)}
+.picklist li.add button{color:var(--g700);font-weight:700;border-top:1px dashed var(--g700)}
+.catnew{margin-top:10px}
 .catlist{list-style:none;margin:0 0 14px;padding:0;border:1px solid var(--line);background:var(--field)}
 .catlist li{display:flex;align-items:center;gap:10px;padding:7px 8px 7px 12px;border-bottom:1px solid var(--line)}
 .catlist li:last-child{border-bottom:0}
@@ -737,16 +743,34 @@ function openAsset(id) {
   dlg.dataset.asset = a.id;
 }
 // 분류 선택 칩: 현재 분류 목록 전부를 바로 보여주고, 목록에 없는 값은 직접 입력으로 새 분류를 만든다.
-function chipsInner(type, sel) {
+function catItems(type, sel) {
   const list = [...S.cats[type]]; if (sel && !list.includes(sel)) list.push(sel);
-  return list.map(c => `<label><input type="radio" name="catpick" value="${esc(c)}" ${c === sel ? 'checked' : ''}><span>${esc(c)}</span></label>`).join('') + '<label class="add"><input type="radio" name="catpick" value="__new"><span>+ 직접 입력</span></label>';
+  return list.map(c => `<li><button type="button" role="option" data-act="cat-pick" data-v="${esc(c)}" aria-selected="${c === sel}">${esc(c)}</button></li>`).join('') + '<li class="add"><button type="button" data-act="cat-pick" data-v="__new" aria-selected="false">+ 직접 입력</button></li>';
+}
+const CHEV = '<svg viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M1 1l5 5 5-5"/></svg>';
+function catField(type, sel) {
+  return `<div class="f ${type}" id="catfield"><span class="fl" id="catlbl">분류</span>
+    <button type="button" class="pick" id="catbtn" data-act="cat-toggle" aria-haspopup="listbox" aria-expanded="false" aria-controls="catlist" aria-labelledby="catlbl catbtn"><span class="pv ${sel ? '' : 'none'}">${sel ? esc(sel) : '분류를 선택하세요'}</span>${CHEV}</button>
+    <input type="hidden" name="catpick" value="${esc(sel || '')}">
+    <ul class="picklist" id="catlist" role="listbox" aria-labelledby="catlbl" hidden>${catItems(type, sel)}</ul>
+    <div class="catnew" hidden><input name="cat" maxlength="20" autocomplete="off" placeholder="새 분류 이름 (목록에 함께 추가됩니다)" aria-label="새 분류 이름"></div></div>`;
+}
+// 분류 선택 목록의 상태를 바꾼다. sel이 있으면 선택된 상태로, '__new'면 직접 입력 모드로 둔다.
+function catSet(form, type, sel) {
+  const box = $('#catfield', form); box.className = 'f ' + type;
+  const isNew = sel === '__new', ph = !sel || isNew;
+  $('#catlist', form).innerHTML = catItems(type, isNew ? null : sel);
+  $('input[name="catpick"]', form).value = sel || '';
+  const pv = $('.pv', box); pv.textContent = isNew ? '직접 입력' : sel || '분류를 선택하세요'; pv.classList.toggle('none', !sel);
+  $('.catnew', box).hidden = !isNew;
+  if (isNew) $('#catlist [data-v="__new"]', form).setAttribute('aria-selected', 'true');
 }
 function flowForm(f) {
   const n = !f, type = f?.type || 'out';
   return `<form data-form="flow" novalidate><input type="hidden" name="id" value="${f ? esc(f.id) : ''}">
     <div class="f" style="margin-bottom:14px"><span class="lbl" style="display:block;margin-bottom:5px;color:var(--g700);font-weight:700;letter-spacing:.1em;font-size:12px">구분</span><div class="seg"><label class="out"><input type="radio" name="type" value="out" ${type === 'out' ? 'checked' : ''}>지출</label><label><input type="radio" name="type" value="in" ${type === 'in' ? 'checked' : ''}>수입</label></div></div>
     <div class="two">${money('amt', '금액 (원)', f ? f.amt : '')}<label class="f"><span>날짜</span><input type="date" name="d" value="${esc(f ? f.d : (UI.month === today().slice(0, 7) ? today() : UI.month + '-01'))}" required></label></div>
-    <div class="f" role="radiogroup" aria-labelledby="catlbl"><span class="fl" id="catlbl">분류</span><div class="chips ${type}" id="catpick">${chipsInner(type, f?.cat)}</div><div class="catnew"><input name="cat" maxlength="20" autocomplete="off" placeholder="새 분류 이름 (목록에 함께 추가됩니다)" aria-label="새 분류 이름"></div></div>
+    ${catField(type, f?.cat)}
     <label class="f"><span>메모 (선택)</span><input name="memo" maxlength="60" value="${esc(f?.memo || '')}"></label>
     <p class="err"></p><div class="acts">${n ? '' : '<button class="btn danger sp" type="button" data-act="flow-del" data-id="' + esc(f.id) + '">삭제</button>'}<button class="btn ghost" type="button" data-act="close">취소</button><button class="btn" type="submit">${n ? '추가' : '저장'}</button></div></form>`;
 }
@@ -796,6 +820,17 @@ Object.assign(Actions, {
     const run = () => { S.cats[t] = S.cats[t].filter(x => x !== c); commit(`'${c}' 분류를 삭제했습니다.`); };
     if (n) askConfirm(`'${esc(c)}' 분류를 삭제할까요?<br><span class="sub">이 분류로 기록된 내역 ${n}건은 그대로 남고, 새 내역을 입력할 때 목록에서만 사라집니다.</span>`, run);
     else run();
+  },
+  'cat-toggle'(d, t) {
+    const f = t.closest('form'), l = $('#catlist', f), open = l.hidden;
+    l.hidden = !open; t.setAttribute('aria-expanded', String(open));
+    if (open) { const on = $('[aria-selected="true"]', l) || $('button', l); on.scrollIntoView({ block: 'nearest' }); }
+  },
+  'cat-pick'(d, t) {
+    const f = t.closest('form'), type = f.elements.type.value, v = d.v;
+    catSet(f, type, v); $('#catlist', f).hidden = true; const b = $('#catbtn', f); b.setAttribute('aria-expanded', 'false');
+    const er = $('.err', f); if (er) er.textContent = '';
+    if (v === '__new') $('input[name="cat"]', f).focus({ preventScroll: true }); else b.focus({ preventScroll: true });
   },
   'flow-new'() { openDlg('현금 흐름 추가', flowForm(null)); },
   'flow-edit'(d) { const f = S.flows.find(x => x.id === d.id); if (!f) return gone(); openDlg('내역 수정', flowForm(f)); },
@@ -905,9 +940,8 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.name === 'cur' && t.form && t.form.dataset.form === 'asset') { const m = $('[data-money]', t.form); if (m) m.dispatchEvent(new Event('input', { bubbles: true })); }
-  if (t.name === 'type' && t.form && t.form.dataset.form === 'flow') { const box = $('#catpick', t.form); if (box) { box.className = 'chips ' + t.value; box.innerHTML = chipsInner(t.value, null); } }
-  if ((t.name === 'catpick' || t.name === 'type') && t.form) { const er = $('.err', t.form); if (er) er.textContent = ''; }
-  if (t.name === 'catpick' && t.value === '__new') { const i = $('[name="cat"]', t.form); if (i) i.focus({ preventScroll: true }); }
+  if (t.name === 'type' && t.form && t.form.dataset.form === 'flow') { catSet(t.form, t.value, null); const b = $('#catbtn', t.form); b.setAttribute('aria-expanded', 'false'); $('#catlist', t.form).hidden = true; }
+  if (t.name === 'type' && t.form) { const er = $('.err', t.form); if (er) er.textContent = ''; }
 });
 document.addEventListener('submit', e => {
   const f = e.target.closest('form[data-form]'); if (!f) return;
