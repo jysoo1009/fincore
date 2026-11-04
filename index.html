@@ -110,6 +110,18 @@ main:focus{outline:none}
 .row .s{font-size:12.5px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .v{text-align:right;font:700 16px var(--serif);white-space:nowrap}
 .row .v small{display:block;font:400 12px var(--sans);color:var(--mute)}
+div.f{margin:0 0 14px}
+.fl{display:block;font-size:12px;font-weight:700;letter-spacing:.1em;color:var(--g700);margin-bottom:5px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips label{position:relative;display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border:1px solid var(--g700);background:var(--field);cursor:pointer;font-size:14px;font-weight:600;color:var(--g800);margin:0}
+.chips label:hover{background:var(--paper2)}
+.chips input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;min-height:0;padding:0;border:0}
+.chips label:has(input:checked){background:var(--g800);border-color:var(--g900);color:var(--paper)}
+.chips.out label:has(input:checked){background:var(--red);border-color:var(--red)}
+.chips label:has(input:focus-visible){outline:2px solid var(--brass);outline-offset:2px}
+.chips label.add{border-style:dashed}
+.catnew{display:none;margin-top:10px}
+.chips:has(input[value="__new"]:checked) + .catnew{display:block}
 .catlist{list-style:none;margin:0 0 14px;padding:0;border:1px solid var(--line);background:var(--field)}
 .catlist li{display:flex;align-items:center;gap:10px;padding:7px 8px 7px 12px;border-bottom:1px solid var(--line)}
 .catlist li:last-child{border-bottom:0}
@@ -724,12 +736,17 @@ function openAsset(id) {
     <p class="err"></p><div class="acts"><button class="btn danger sp" type="button" data-act="asset-del" data-id="${id_}">삭제</button><button class="btn ghost" type="button" data-act="asset-edit" data-id="${id_}">정보 수정</button><button class="btn" type="submit">기록 추가</button></div></form>`);
   dlg.dataset.asset = a.id;
 }
+// 분류 선택 칩: 현재 분류 목록 전부를 바로 보여주고, 목록에 없는 값은 직접 입력으로 새 분류를 만든다.
+function chipsInner(type, sel) {
+  const list = [...S.cats[type]]; if (sel && !list.includes(sel)) list.push(sel);
+  return list.map(c => `<label><input type="radio" name="catpick" value="${esc(c)}" ${c === sel ? 'checked' : ''}><span>${esc(c)}</span></label>`).join('') + '<label class="add"><input type="radio" name="catpick" value="__new"><span>+ 직접 입력</span></label>';
+}
 function flowForm(f) {
-  const n = !f, type = f?.type || 'out', cats = S.cats[type];
+  const n = !f, type = f?.type || 'out';
   return `<form data-form="flow" novalidate><input type="hidden" name="id" value="${f ? esc(f.id) : ''}">
     <div class="f" style="margin-bottom:14px"><span class="lbl" style="display:block;margin-bottom:5px;color:var(--g700);font-weight:700;letter-spacing:.1em;font-size:12px">구분</span><div class="seg"><label class="out"><input type="radio" name="type" value="out" ${type === 'out' ? 'checked' : ''}>지출</label><label><input type="radio" name="type" value="in" ${type === 'in' ? 'checked' : ''}>수입</label></div></div>
     <div class="two">${money('amt', '금액 (원)', f ? f.amt : '')}<label class="f"><span>날짜</span><input type="date" name="d" value="${esc(f ? f.d : (UI.month === today().slice(0, 7) ? today() : UI.month + '-01'))}" required></label></div>
-    <label class="f"><span>분류</span><input name="cat" list="catlist" maxlength="20" value="${esc(f?.cat || '')}" placeholder="목록에서 고르거나 직접 입력" autocomplete="off"><datalist id="catlist">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
+    <div class="f" role="radiogroup" aria-labelledby="catlbl"><span class="fl" id="catlbl">분류</span><div class="chips ${type}" id="catpick">${chipsInner(type, f?.cat)}</div><div class="catnew"><input name="cat" maxlength="20" autocomplete="off" placeholder="새 분류 이름 (목록에 함께 추가됩니다)" aria-label="새 분류 이름"></div></div>
     <label class="f"><span>메모 (선택)</span><input name="memo" maxlength="60" value="${esc(f?.memo || '')}"></label>
     <p class="err"></p><div class="acts">${n ? '' : '<button class="btn danger sp" type="button" data-act="flow-del" data-id="' + esc(f.id) + '">삭제</button>'}<button class="btn ghost" type="button" data-act="close">취소</button><button class="btn" type="submit">${n ? '추가' : '저장'}</button></div></form>`;
 }
@@ -857,7 +874,10 @@ Object.assign(Forms, {
     const amt = Math.round(num(fd.get('amt'))), d = fd.get('d'), id = fd.get('id'), type = fd.get('type') === 'in' ? 'in' : 'out';
     if (!(amt > 0)) return fail(f, '금액을 0보다 큰 숫자로 입력하세요. (예: 12000, 3만)');
     if (!validDate(d)) return fail(f, '날짜를 확인하세요.');
-    const rec = { type, d, amt, cat: String(fd.get('cat') || '').trim() || '미분류', memo: String(fd.get('memo') || '').trim() };
+    const pick = fd.get('catpick'), cat = pick === '__new' ? String(fd.get('cat') || '').trim().slice(0, 20) : String(pick || '');
+    if (!cat) return fail(f, pick === '__new' ? '새 분류 이름을 입력하세요.' : '분류를 선택하세요.');
+    if (!S.cats[type].some(c => c.toLowerCase() === cat.toLowerCase()) && pick === '__new') S.cats[type].push(cat);
+    const rec = { type, d, amt, cat, memo: String(fd.get('memo') || '').trim() };
     if (id) { const x = S.flows.find(y => y.id === id); if (!x) return gone(); Object.assign(x, rec); }
     else S.flows.push(Object.assign({ id: uid(), t: Date.now() }, rec));
     UI.month = d.slice(0, 7); dlg.close(); commit(id ? '저장했습니다.' : '추가했습니다.');
@@ -885,7 +905,9 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.name === 'cur' && t.form && t.form.dataset.form === 'asset') { const m = $('[data-money]', t.form); if (m) m.dispatchEvent(new Event('input', { bubbles: true })); }
-  if (t.name === 'type' && t.form && t.form.dataset.form === 'flow') { const dl = $('#catlist', t.form); if (dl) dl.innerHTML = S.cats[t.value].map(c => `<option value="${esc(c)}">`).join(''); }
+  if (t.name === 'type' && t.form && t.form.dataset.form === 'flow') { const box = $('#catpick', t.form); if (box) { box.className = 'chips ' + t.value; box.innerHTML = chipsInner(t.value, null); } }
+  if ((t.name === 'catpick' || t.name === 'type') && t.form) { const er = $('.err', t.form); if (er) er.textContent = ''; }
+  if (t.name === 'catpick' && t.value === '__new') { const i = $('[name="cat"]', t.form); if (i) i.focus({ preventScroll: true }); }
 });
 document.addEventListener('submit', e => {
   const f = e.target.closest('form[data-form]'); if (!f) return;
