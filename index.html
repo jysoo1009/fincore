@@ -110,6 +110,14 @@ main:focus{outline:none}
 .row .s{font-size:12.5px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .v{text-align:right;font:700 16px var(--serif);white-space:nowrap}
 .row .v small{display:block;font:400 12px var(--sans);color:var(--mute)}
+.catlist{list-style:none;margin:0 0 14px;padding:0;border:1px solid var(--line);background:var(--field)}
+.catlist li{display:flex;align-items:center;gap:10px;padding:7px 8px 7px 12px;border-bottom:1px solid var(--line)}
+.catlist li:last-child{border-bottom:0}
+.catlist .cn{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:600}
+.catlist .cu{color:var(--mute);font-size:12.5px;white-space:nowrap}
+.catlist .btn{min-height:36px;padding:0 12px;font-size:13px}
+.catadd{display:flex;gap:10px}
+.catadd input{flex:1;min-width:0}
 .dayh{display:flex;justify-content:space-between;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--g700);background:var(--paper2);padding:6px 8px;margin-top:10px;border-top:1px solid var(--line)}
 .dayh:first-child{margin-top:0}
 .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;padding:1px 6px;border:1px solid var(--g600);color:var(--g700);margin-right:8px;vertical-align:1px}
@@ -651,21 +659,29 @@ defineModule({ id: 'flow', label: '현금 흐름', icon: 'flow', order: 30, rend
   el.innerHTML = page('CASH FLOW', '현금 흐름', body, tb);
 } });
 
+// 설정 화면의 수입·지출 분류 목록. 추가·삭제는 누르는 즉시 저장된다.
+function catPanel(t, title) {
+  const used = c => S.flows.filter(f => f.type === t && f.cat === c).length;
+  const items = S.cats[t].map(c => `<li><span class="cn">${esc(c)}</span><span class="cu">${used(c)}건</span><button class="btn danger sm" type="button" data-act="cat-del" data-t="${t}" data-id="${esc(c)}" aria-label="${esc(c)} 분류 삭제">삭제</button></li>`).join('');
+  return panel(title, `<ul class="catlist">${items}</ul>
+    <form data-form="catadd" novalidate><input type="hidden" name="type" value="${t}"><div class="catadd"><input name="cat-${t}" maxlength="20" autocomplete="off" placeholder="새 분류 이름" aria-label="${title} 이름"><button class="btn" type="submit">추가</button></div><p class="err"></p></form>`, 'w6', `${S.cats[t].length}개`);
+}
+
 defineModule({ id: 'settings', label: '설정', icon: 'settings', order: 90, render(el) {
-  const body = `
-  ${panel('환율·분류', `<form data-form="settings" novalidate>
+  const body = `<div class="grid">
+  ${panel('환율', `<form data-form="settings" novalidate>
       <label class="f"><span>달러 환율 (1달러 = 원)</span><input name="usdkrw" inputmode="decimal" value="${esc(S.settings.usdkrw)}"><div class="hint">현재 합계에 쓰는 환율입니다. 달러 자산의 가치를 기록하면 그때의 환율이 함께 저장되어, 과거 추이는 기록 당시 환율로 계산됩니다.</div></label>
-      <label class="f"><span>수입 분류 (쉼표로 구분)</span><input name="cin" value="${esc(S.cats.in.join(', '))}"></label>
-      <label class="f"><span>지출 분류 (쉼표로 구분)</span><input name="cout" value="${esc(S.cats.out.join(', '))}"></label>
-      <p class="err"></p><div class="acts"><button class="btn" type="submit">저장</button></div></form>`)}
+      <p class="err"></p><div class="acts"><button class="btn" type="submit">저장</button></div></form>`, 'w12')}
+  ${catPanel('in', '수입 분류')}
+  ${catPanel('out', '지출 분류')}
   ${panel('데이터', `<p class="note">모든 기록은 지금 사용하는 이 브라우저에만 저장됩니다. 다른 기기와 공유되지 않으니, 가끔 내보내기로 백업해 두세요.</p>
       ${isIOSBrowser() ? '<p class="note warn">iPhone·iPad의 Safari는 이 사이트를 7일 넘게 열지 않으면 저장된 기록을 지울 수 있습니다. 공유 버튼 → <b>홈 화면에 추가</b>로 설치해서 쓰고, 백업도 자주 해 두세요.</p>' : ''}
       <div class="acts" style="justify-content:flex-start">
         <button class="btn ghost" data-act="export">내보내기 (JSON)</button>
         <button class="btn ghost" data-act="import">가져오기</button>
         <button class="btn ghost" data-act="demo">예시 데이터 불러오기</button>
-        <button class="btn danger" data-act="wipe">모든 데이터 삭제</button></div>`)}
-  ${panel('정보', `<dl class="kv"><dt>버전</dt><dd>알파 0.2</dd><dt>자산 항목</dt><dd>${S.assets.length}개</dd><dt>현금 흐름 내역</dt><dd>${S.flows.length}건</dd><dt>마지막 백업</dt><dd>${lastBackupText()}</dd><dt>저장소 보호</dt><dd>${StorageInfo.persisted === null ? '확인 중' : StorageInfo.persisted ? '켜짐 (브라우저가 임의로 지우지 않음)' : '꺼짐 (공간이 부족하면 브라우저가 지울 수 있음)'}</dd></dl>`)}`;
+        <button class="btn danger" data-act="wipe">모든 데이터 삭제</button></div>`, 'w12')}
+  ${panel('정보', `<dl class="kv"><dt>버전</dt><dd>알파 0.2</dd><dt>자산 항목</dt><dd>${S.assets.length}개</dd><dt>현금 흐름 내역</dt><dd>${S.flows.length}건</dd><dt>마지막 백업</dt><dd>${lastBackupText()}</dd><dt>저장소 보호</dt><dd>${StorageInfo.persisted === null ? '확인 중' : StorageInfo.persisted ? '켜짐 (브라우저가 임의로 지우지 않음)' : '꺼짐 (공간이 부족하면 브라우저가 지울 수 있음)'}</dd></dl>`, 'w12')}</div>`;
   el.innerHTML = page('SETTINGS', '설정', body);
 } });
 
@@ -755,6 +771,15 @@ Object.assign(Actions, {
       b.h = b.h.filter(x => x.d !== day); commit('기록을 삭제했습니다.'); openAsset(id);
     });
   },
+  'cat-del'(d) {
+    const t = d.t === 'in' ? 'in' : 'out', c = d.id, list = S.cats[t];
+    if (!list.includes(c)) return;
+    if (list.length <= 1) return toast('분류는 하나 이상 있어야 합니다.');
+    const n = S.flows.filter(f => f.type === t && f.cat === c).length;
+    const run = () => { S.cats[t] = S.cats[t].filter(x => x !== c); commit(`'${c}' 분류를 삭제했습니다.`); };
+    if (n) askConfirm(`'${esc(c)}' 분류를 삭제할까요?<br><span class="sub">이 분류로 기록된 내역 ${n}건은 그대로 남고, 새 내역을 입력할 때 목록에서만 사라집니다.</span>`, run);
+    else run();
+  },
   'flow-new'() { openDlg('현금 흐름 추가', flowForm(null)); },
   'flow-edit'(d) { const f = S.flows.find(x => x.id === d.id); if (!f) return gone(); openDlg('내역 수정', flowForm(f)); },
   'flow-del'(d) { const id = d.id; askConfirm('이 내역을 삭제할까요?', () => { S.flows = S.flows.filter(f => f.id !== id); dlg.close(); commit('삭제했습니다.'); }); },
@@ -840,10 +865,14 @@ Object.assign(Forms, {
   settings(f, fd) {
     const r = num(fd.get('usdkrw'));
     if (isNaN(r) || r <= 0) return fail(f, '환율을 0보다 큰 숫자로 입력하세요.');
-    const list = s => [...new Set(String(s).split(',').map(x => x.trim()).filter(Boolean))];
-    const ci = list(fd.get('cin')), co = list(fd.get('cout'));
-    if (!ci.length || !co.length) return fail(f, '분류를 하나 이상 입력하세요.');
-    S.settings.usdkrw = r; S.cats.in = ci; S.cats.out = co; commit('저장했습니다.');
+    S.settings.usdkrw = r; commit('저장했습니다.');
+  },
+  catadd(f, fd) {
+    const t = fd.get('type') === 'in' ? 'in' : 'out', name = String(fd.get('cat-' + t) || '').trim().slice(0, 20);
+    if (!name) return fail(f, '분류 이름을 입력하세요.');
+    if (S.cats[t].some(c => c.toLowerCase() === name.toLowerCase())) return fail(f, '이미 있는 분류입니다.');
+    S.cats[t].push(name); commit(`'${name}' 분류를 추가했습니다.`);
+    const i = $(`#view [name="cat-${t}"]`); if (i) i.focus({ preventScroll: true });
   }
 });
 
