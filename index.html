@@ -146,6 +146,27 @@ div.f{margin:0 0 14px}
 /* ---------- 버튼·폼 ---------- */
 .btn{min-height:42px;padding:0 18px;border:1px solid var(--g900);background:var(--g800);color:var(--paper);font-weight:600;letter-spacing:.03em;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;font-size:14px}
 .btn:hover{background:var(--g700)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn[disabled]:hover{background:var(--g800)}
+dialog.wide{width:min(780px,calc(100% - 24px))}
+.steps{margin:0 0 16px;padding-left:22px;display:grid;gap:9px;font-size:14.5px}
+.steps li::marker{font-weight:700;color:var(--g700)}
+.promptbox{width:100%;min-height:240px;font:12.5px/1.6 ui-monospace,Menlo,Consolas,monospace;resize:vertical;background:var(--field);color:var(--ink)}
+.colt{width:100%;border-collapse:collapse;font-size:13px;margin:0 0 8px}
+.colt th,.colt td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+.colt th{background:var(--paper2);white-space:nowrap;width:1%}
+.tblwrap{overflow:auto;max-height:300px;border:1px solid var(--line);background:var(--field);margin:0 0 14px}
+.itable{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+.itable th{position:sticky;top:0;background:var(--paper2);text-align:left;padding:6px 9px;border-bottom:1px solid var(--g700);font-size:12px}
+.itable td{padding:6px 9px;border-bottom:1px solid var(--line)}
+.itable td.r{text-align:right;font:700 13px var(--serif)}
+.itable td.m{max-width:190px;overflow:hidden;text-overflow:ellipsis}
+.itable tr.dup td{opacity:.5}
+.itable em{font-style:normal;font-size:11px;color:var(--g700);border:1px solid var(--g600);padding:0 4px;margin-left:6px}
+.chk{display:flex;gap:10px;align-items:flex-start;margin:0 0 10px;font-size:14px;cursor:pointer}
+.chk input{-webkit-appearance:checkbox;appearance:auto;width:18px;height:18px;min-height:0;padding:0;margin:2px 0 0;flex:none;accent-color:var(--g800)}
+.errlist{margin:0 0 14px;padding:10px 12px 10px 28px;border:1px solid var(--red);color:var(--red);font-size:13px;max-height:140px;overflow:auto;background:var(--field)}
+.stats.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
 .btn.ghost{background:transparent;color:var(--g800)}
 .btn.ghost:hover{background:var(--paper2)}
 .btn.danger{background:transparent;color:var(--red);border-color:var(--red)}
@@ -229,7 +250,7 @@ dialog::backdrop{background:rgba(16,41,27,.6)}
   .stat{padding:12px 12px}
   .nwmini{gap:20px}
   .hbars .hb{grid-template-columns:78px 1fr auto}
-  dialog{margin:auto auto 0;width:100%;max-width:none;max-height:92vh}
+  dialog,dialog.wide{margin:auto auto 0;width:100%;max-width:none;max-height:92vh}
   .db{padding:18px 16px calc(22px + env(safe-area-inset-bottom))}
   .toast{bottom:calc(84px + env(safe-area-inset-bottom))}
   .mnav b{min-width:112px}
@@ -255,6 +276,7 @@ dialog::backdrop{background:rgba(16,41,27,.6)}
 <dialog id="dlg2"></dialog>
 <div class="toast" id="toast" role="status" hidden></div>
 <input type="file" id="imp" accept="application/json,.json" hidden>
+<input type="file" id="csvfile" accept=".csv,.txt,text/csv,text/plain" hidden>
 <noscript><p style="padding:24px">Fincore를 사용하려면 JavaScript가 필요합니다.</p></noscript>
 
 <script>
@@ -388,7 +410,7 @@ const Store = {
       const ok = isObj(x) && validDate(x.d) && (x.type === 'in' || x.type === 'out') && toNum(x.amt) > 0 && isFinite(toNum(x.amt));
       if (!ok) dropped++;
       return ok;
-    }).map(x => ({ id: cleanId(x.id), t: isFinite(toNum(x.t)) ? toNum(x.t) : 0, type: x.type, d: x.d, amt: toNum(x.amt), cat: str(x.cat, 20) || '미분류', memo: str(x.memo, 60) }));
+    }).map(x => ({ id: cleanId(x.id), t: isFinite(toNum(x.t)) ? toNum(x.t) : 0, type: x.type, d: x.d, amt: toNum(x.amt), cat: str(x.cat, 20) || '미분류', memo: str(x.memo, 60), ...(/^([01]\d|2[0-3]):[0-5]\d$/.test(x.tm) ? { tm: x.tm } : {}), ...(ID_RE.test(String(x.b ?? '')) ? { b: String(x.b) } : {}) }));
     let ext = {};
     try { ext = isObj(r.ext) ? JSON.parse(JSON.stringify(r.ext)) : {}; } catch (e) {}
     this.dropped = dropped;
@@ -544,7 +566,7 @@ function catBars(list) {
 /* ---------- 목록 조각 ---------- */
 function flowRow(f) {
   const out = f.type === 'out';
-  return `<button class="row" data-act="flow-edit" data-id="${esc(f.id)}"><span><span class="t"><span class="tag ${out ? 'out' : ''}">${out ? '지출' : '수입'}</span>${esc(f.cat)}</span><span class="s">${esc(f.memo || dShort(f.d))}</span></span><span class="v ${out ? 'neg' : 'pos'}">${out ? '-' : '+'}${nf.format(Math.round(f.amt))}원</span></button>`;
+  return `<button class="row" data-act="flow-edit" data-id="${esc(f.id)}"><span><span class="t"><span class="tag ${out ? 'out' : ''}">${out ? '지출' : '수입'}</span>${esc(f.cat)}</span><span class="s">${esc((f.tm ? f.tm + ' · ' : '') + (f.memo || dShort(f.d)))}</span></span><span class="v ${out ? 'neg' : 'pos'}">${out ? '-' : '+'}${nf.format(Math.round(f.amt))}원</span></button>`;
 }
 function assetRow(a) {
   const last = curEntry(a), v = last ? last.v : 0, krw = a.cur === 'USD';
@@ -661,7 +683,7 @@ const UI = { month: today().slice(0, 7), ftype: 'all' };
 defineModule({ id: 'flow', label: '현금 흐름', icon: 'flow', order: 30, render(el) {
   const l = flowsOf(UI.month), i = sumOf(l, 'in'), o = sumOf(l, 'out'), n = i - o;
   const shown = l.filter(f => UI.ftype === 'all' || f.type === UI.ftype);
-  const tb = `<div class="grp"><div class="mnav"><button data-act="month" data-d="-1" aria-label="이전 달">‹</button><b>${mLabel(UI.month)}</b><button data-act="month" data-d="1" aria-label="다음 달">›</button></div></div><button class="btn" data-act="flow-new">${icon('plus')}내역 추가</button>`;
+  const tb = `<div class="grp"><div class="mnav"><button data-act="month" data-d="-1" aria-label="이전 달">‹</button><b>${mLabel(UI.month)}</b><button data-act="month" data-d="1" aria-label="다음 달">›</button></div></div><span class="grp"><button class="btn ghost" data-act="csv-open">CSV로 일괄 추가</button><button class="btn" data-act="flow-new">${icon('plus')}내역 추가</button></span>`;
   const seg = `<div class="seg" role="group" aria-label="구분">${[['all', '전체'], ['in', '수입'], ['out', '지출']].map(([v, t]) => `<button data-act="ftype" data-v="${v}" aria-pressed="${UI.ftype === v}">${t}</button>`).join('')}</div>`;
   let list;
   if (!shown.length) list = emptyBox(l.length ? '조건에 맞는 내역이 없습니다.' : `${mLabel(UI.month)}에는 기록이 없습니다.`, `<button class="btn" data-act="flow-new">${icon('plus')}내역 추가</button>`);
@@ -669,12 +691,12 @@ defineModule({ id: 'flow', label: '현금 흐름', icon: 'flow', order: 30, rend
     const by = {}; shown.forEach(f => (by[f.d] = by[f.d] || []).push(f));
     list = Object.keys(by).sort().reverse().map(d => {
       const net = by[d].reduce((s, f) => s + (f.type === 'in' ? f.amt : -f.amt), 0);
-      return `<div class="dayh"><span>${dLabel(d)}</span><span class="${net < 0 ? 'neg' : 'pos'}">${sgn(net)}</span></div>` + by[d].sort((a, b) => (b.t || 0) - (a.t || 0)).map(flowRow).join('');
+      return `<div class="dayh"><span>${dLabel(d)}</span><span class="${net < 0 ? 'neg' : 'pos'}">${sgn(net)}</span></div>` + by[d].sort((a, b) => (b.tm || '').localeCompare(a.tm || '') || (b.t || 0) - (a.t || 0)).map(flowRow).join('');
     }).join('');
   }
   const body = `<div class="panel"><div class="stats"><div class="stat"><div class="lbl">수입</div><div class="mid pos">${kor(i)}</div></div><div class="stat"><div class="lbl">지출</div><div class="mid neg">${kor(o)}</div></div><div class="stat"><div class="lbl">순현금흐름</div><div class="mid ${n < 0 ? 'neg' : 'pos'}">${sgn(n)}</div><div class="sub">저축률 ${i > 0 ? Math.round(n / i * 100) + '%' : '-'}</div></div></div></div>
     <div class="grid" style="margin-top:18px"><div class="w7">${panel('내역', list, '', seg)}</div><div class="w5">${panel('분류별 지출', catBars(l))}</div></div>`;
-  el.innerHTML = page('CASH FLOW', '현금 흐름', body, tb);
+  el.innerHTML = page('CASH FLOW', '현금 흐름', importNote() + body, tb);
 } });
 
 // 설정 화면의 수입·지출 분류 목록. 추가·삭제는 누르는 즉시 저장된다.
@@ -707,7 +729,8 @@ defineModule({ id: 'settings', label: '설정', icon: 'settings', order: 90, ren
    대화상자
    ===================================================================== */
 const dlg = $('#dlg'), dlg2 = $('#dlg2');
-function openDlg(title, body, d = dlg) {
+function openDlg(title, body, d = dlg, wide = false) {
+  d.classList.toggle('wide', wide);
   if (d === dlg) delete d.dataset.asset;
   d.innerHTML =`<div class="dh"><h2>${esc(title)}</h2><button class="x" type="button" data-act="close" aria-label="닫기">${icon('x')}</button></div><div class="db">${body}</div>`;
   if (!d.open) d.showModal();
@@ -771,6 +794,7 @@ function flowForm(f) {
     <div class="f" style="margin-bottom:14px"><span class="lbl" style="display:block;margin-bottom:5px;color:var(--g700);font-weight:700;letter-spacing:.1em;font-size:12px">구분</span><div class="seg"><label class="out"><input type="radio" name="type" value="out" ${type === 'out' ? 'checked' : ''}>지출</label><label><input type="radio" name="type" value="in" ${type === 'in' ? 'checked' : ''}>수입</label></div></div>
     <div class="two">${money('amt', '금액 (원)', f ? f.amt : '')}<label class="f"><span>날짜</span><input type="date" name="d" value="${esc(f ? f.d : (UI.month === today().slice(0, 7) ? today() : UI.month + '-01'))}" required></label></div>
     ${catField(type, f?.cat)}
+    <label class="f"><span>시간 (선택)</span><input type="time" name="tm" value="${esc(f?.tm || '')}"></label>
     <label class="f"><span>메모 (선택)</span><input name="memo" maxlength="60" value="${esc(f?.memo || '')}"></label>
     <p class="err"></p><div class="acts">${n ? '' : '<button class="btn danger sp" type="button" data-act="flow-del" data-id="' + esc(f.id) + '">삭제</button>'}<button class="btn ghost" type="button" data-act="close">취소</button><button class="btn" type="submit">${n ? '추가' : '저장'}</button></div></form>`;
 }
@@ -779,8 +803,8 @@ function flowForm(f) {
 // 다른 탭에서 지워졌거나 찾을 수 없는 항목을 다루려 할 때
 const gone = () => { if (dlg.open) dlg.close(); toast('이미 삭제된 항목입니다.'); render(); };
 const stamp = () => today().replace(/-/g, '');
-function download(name, text) {
-  const b = new Blob([text], { type: 'application/json' }), a = document.createElement('a');
+function download(name, text, type = 'application/json') {
+  const b = new Blob([text], { type }), a = document.createElement('a');
   a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 function exportNow(quiet) {
@@ -875,6 +899,242 @@ function importFile(e) {
 }
 $('#imp').onchange = importFile;
 
+/* ---------- CSV 일괄 추가 ---------- */
+// 카드사·은행 내역을 사용자의 AI가 아래 형식의 CSV로 바꿔 주면, 읽어서 미리 보여 준 뒤 한 번에 추가한다.
+const CSV_MAX_ROWS = 5000, CSV_MAX_BYTES = 2 * 1024 * 1024;
+const CSV_COLS = {
+  date: ['날짜', '일자', '거래일', '거래일자', 'date'],
+  time: ['시간', '시각', '거래시간', 'time'],
+  cat: ['카테고리', '분류', '항목', 'category'],
+  amt: ['액수', '금액', '거래금액', 'amount'],
+  memo: ['메모', '내용', '적요', '가맹점', 'memo'],
+  type: ['구분', '유형', 'type']
+};
+function csvPrompt() {
+  const etc = S.cats.in.find(c => /^기타/.test(c)) || S.cats.in[S.cats.in.length - 1];
+  return `첨부한 카드·은행 거래 내역(엑셀, PDF, 캡처, 붙여넣은 텍스트 등)을 가계부 앱에 넣을 CSV로 바꿔 줘.
+
+[출력 형식]
+- 첫 줄은 헤더 그대로: 날짜,시간,카테고리,액수,메모
+- 거래 1건당 1줄, 쉼표(,)로 구분, UTF-8.
+- 날짜: YYYY-MM-DD (예: 2026-11-04)
+- 시간: HH:MM, 24시간제 (예: 13:45). 내역에 시간이 없으면 비워 둬.
+- 카테고리: 아래 목록에서 가장 알맞은 것 하나만 골라. 목록에 없는 이름은 만들지 마.
+  · 수입: ${S.cats.in.join(', ')}
+  · 지출: ${S.cats.out.join(', ')}
+- 액수: 원 단위 정수만. 쉼표, 원, ₩ 같은 기호는 빼고, 지출(결제, 출금, 이체)은 음수(-12000), 수입(입금, 급여, 환급)은 양수(3000000)로 써.
+- 메모: 가맹점명이나 거래 내용을 짧게(30자 이내). 메모에 쉼표가 있으면 그 칸 전체를 큰따옴표(")로 감싸.
+
+[규칙]
+- 내역에 있는 거래를 빠짐없이 옮기고, 없는 거래는 만들지 마. 오래된 날짜부터 정렬해.
+- 카드 대금 결제, 내 계좌끼리의 이체처럼 돈이 실제로 나가거나 들어오지 않는 내부 이동은 제외하고, 제외한 건은 마지막에 따로 알려 줘.
+- 결제 취소·환불은 별도 줄로 넣고, 액수는 양수, 카테고리는 ${etc}, 메모는 "환불: 가맹점명"으로 적어.
+- 해외 결제는 청구된 원화 금액으로 적어. 원화 금액이 없으면 임의로 환산하지 말고 마지막에 알려 줘.
+- 출력은 CSV 코드블록 하나만. 설명이나 알려 줄 내용은 코드블록 밖에 짧게 써.
+
+[예시]
+날짜,시간,카테고리,액수,메모
+2026-11-01,08:12,${S.cats.out.find(c => c === '교통') || S.cats.out[0]},-1450,지하철
+2026-11-01,12:40,${S.cats.out[0]},-9000,김밥천국
+2026-11-02,,${S.cats.in[0]},3200000,10월 급여`;
+}
+const CSV_SAMPLE = '날짜,시간,카테고리,액수,메모\n2026-11-01,08:12,교통,-1450,지하철\n2026-11-01,12:40,식비,-9000,김밥천국\n2026-11-02,,급여,3200000,10월 급여\n2026-11-03,19:05,쇼핑,-32900,"책, 문구"\n';
+
+// 쉼표·탭·세미콜론 구분, 큰따옴표로 감싼 칸, 칸 안의 줄바꿈, BOM, AI가 붙인 ``` 줄을 처리한다.
+function parseCsv(text) {
+  const lines = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').split('\n').map(l => /^\s*```/.test(l) ? '' : l); // 줄 번호가 어긋나지 않게 ``` 줄은 빈 줄로 바꾼다
+  text = lines.join('\n');
+  const first = lines.find(l => l.trim()) || '';
+  const delim = [',', '\t', ';'].map(d => [d, first.split(d).length]).sort((a, b) => b[1] - a[1])[0][0];
+  const recs = []; let cells = [], cur = '', q = false, line = 1, start = 1;
+  const endRec = () => { cells.push(cur); cur = ''; if (cells.some(c => c.trim() !== '')) recs.push({ line: start, cells }); cells = []; };
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else { if (c === '\n') line++; cur += c; } }
+    else if (c === '"' && cur === '') q = true;
+    else if (c === delim) { cells.push(cur); cur = ''; }
+    else if (c === '\n') { endRec(); line++; start = line; }
+    else cur += c;
+  }
+  endRec();
+  return recs;
+}
+function parseTime(s) {
+  const m = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(String(s).trim());
+  return !m || +m[1] > 23 || +m[2] > 59 ? null : pad(+m[1]) + ':' + m[2];
+}
+function parseDateCell(s) {
+  const m = /^(\d{4})[-./](\d{1,2})[-./](\d{1,2})\.?(?:[ T]+(\d{1,2}):(\d{2})(?::\d{2})?)?$/.exec(s) || /^(\d{4})(\d{2})(\d{2})$/.exec(s);
+  if (!m) return null;
+  const d = `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`; if (!validDate(d)) return null;
+  let tm = '';
+  if (m[4] != null) { tm = parseTime(m[4] + ':' + m[5]); if (tm == null) return null; }
+  return { d, tm };
+}
+// "-12000", "(12,000)", "+3000000", "3만" 등. 못 읽으면 NaN
+function csvAmount(s) {
+  let t = String(s ?? '').trim(), neg = false;
+  if (/^\(.*\)$/.test(t)) { neg = true; t = t.slice(1, -1); }
+  t = t.replace(/[−–]/g, '-');
+  if (t[0] === '-') { neg = true; t = t.slice(1); } else if (t[0] === '+') t = t.slice(1);
+  const v = num(t);
+  return isNaN(v) ? NaN : neg ? -v : v;
+}
+function readCsv(text) {
+  const recs = parseCsv(text);
+  if (!recs.length) return { fatal: '파일에 내용이 없습니다.' };
+  const norm = s => String(s).trim().toLowerCase().replace(/\s+/g, '');
+  let col = { date: 0, time: 1, cat: 2, amt: 3, memo: 4 }, body = recs;
+  const h = recs[0].cells.map(norm);
+  if (h.some(x => CSV_COLS.date.includes(x) || CSV_COLS.amt.includes(x))) {
+    col = {};
+    for (const k of Object.keys(CSV_COLS)) { const i = h.findIndex(x => CSV_COLS[k].includes(x)); if (i >= 0) col[k] = i; }
+    if (col.date == null || col.amt == null) return { fatal: '첫 줄(헤더)에서 "날짜"와 "액수" 열을 찾을 수 없습니다. 첫 줄은 날짜,시간,카테고리,액수,메모 여야 합니다.' };
+    body = recs.slice(1);
+  }
+  if (!body.length) return { fatal: '헤더만 있고 내역이 없습니다.' };
+  if (body.length > CSV_MAX_ROWS) return { fatal: `한 번에 ${nf.format(CSV_MAX_ROWS)}줄까지 추가할 수 있습니다. 파일을 나눠서 넣어 주세요.` };
+  const get = (r, k) => col[k] == null ? '' : String(r.cells[col[k]] ?? '').replace(/\s+/g, ' ').trim();
+  const rows = body.map(r => {
+    const line = r.line, err = error => ({ line, error });
+    const ds = get(r, 'date'), ts = get(r, 'time'), as = get(r, 'amt');
+    const dm = parseDateCell(ds); if (!dm) return err(`날짜를 읽을 수 없습니다: "${ds}" (예: 2026-11-04)`);
+    let tm = dm.tm;
+    if (ts) { tm = parseTime(ts); if (tm == null) return err(`시간을 읽을 수 없습니다: "${ts}" (예: 13:45)`); }
+    let a = csvAmount(as); if (isNaN(a)) return err(`액수를 읽을 수 없습니다: "${as}"`);
+    a = Math.round(a); if (a === 0) return err('액수가 0원입니다.');
+    let type = a < 0 ? 'out' : 'in';
+    if (col.type != null) {
+      const t = get(r, 'type');
+      if (/수입|입금|^in/i.test(t)) type = 'in'; else if (/지출|출금|^out/i.test(t)) type = 'out'; else return err(`구분은 수입 또는 지출이어야 합니다: "${t}"`);
+    }
+    return { line, d: dm.d, tm, type, amt: Math.abs(a), cat: get(r, 'cat'), memo: get(r, 'memo').slice(0, 60) };
+  });
+  return { rows };
+}
+
+let ImportState = null;
+const fkey = f => [f.d, f.tm || '', f.type, f.amt, String(f.memo || '').toLowerCase()].join('|');
+function resolveCat(type, raw, opts) {
+  const ex = n => S.cats[type].find(c => c.toLowerCase() === n.toLowerCase());
+  const name = String(raw).trim().slice(0, 20);
+  if (!name) return { cat: '미분류' };
+  if (ex(name)) return { cat: ex(name) };
+  if (opts.other) { const o = type === 'in' ? '기타 수입' : '기타 지출'; return ex(o) ? { cat: ex(o) } : { cat: o, isNew: true }; }
+  return { cat: name, isNew: true };
+}
+// 이미 있는 내역과 날짜·시간·구분·금액·메모가 같으면 중복으로 본다. (같은 내용 2건 중 1건만 있으면 1건만 중복)
+function buildPreview() {
+  const { parsed, opts } = ImportState, have = new Map(), items = [], errs = [];
+  S.flows.forEach(f => { const k = fkey(f); have.set(k, (have.get(k) || 0) + 1); });
+  for (const r of parsed.rows) {
+    if (r.error) { errs.push(r); continue; }
+    const c = resolveCat(r.type, r.cat, opts), it = { ...r, cat: c.cat, isNew: !!c.isNew }, k = fkey(it);
+    if ((have.get(k) || 0) > 0) { have.set(k, have.get(k) - 1); it.dup = true; }
+    items.push(it);
+  }
+  const add = items.filter(x => opts.incDup || !x.dup), newCats = { in: [], out: [] };
+  add.forEach(x => { if (x.isNew && !newCats[x.type].some(c => c.toLowerCase() === x.cat.toLowerCase())) newCats[x.type].push(x.cat); });
+  return { items, errs, add, dups: items.filter(x => x.dup).length, newCats };
+}
+function csvGuide() {
+  const cell = (n, t) => `<tr><th>${n}</th><td>${t}</td></tr>`;
+  return `<ol class="steps">
+      <li><b>내역 받기</b> — 카드사·은행 앱이나 홈페이지에서 이용 내역을 엑셀, CSV, PDF 중 편한 형식으로 내려받아요. 캡처 이미지나 복사한 글자도 괜찮아요.</li>
+      <li><b>프롬프트 복사</b> — 아래 <b>프롬프트 복사</b> 버튼을 눌러요. 지금 설정된 수입·지출 분류가 이미 들어 있어요.</li>
+      <li><b>AI에게 요청</b> — ChatGPT, Claude, Gemini 같은 사용하는 AI 채팅에 프롬프트를 붙여넣고, 1번에서 받은 내역을 함께 첨부하거나 붙여넣어요.</li>
+      <li><b>CSV 파일로 저장</b> — AI가 준 CSV 코드블록의 <b>복사</b> 버튼을 눌러 메모장(Windows)이나 텍스트 편집기(Mac)에 붙여넣고, 이름 끝을 <b>.csv</b>로, 인코딩을 <b>UTF-8</b>로 저장해요. 파일을 바로 만들어 주는 AI라면 그 파일을 받으면 돼요.</li>
+      <li><b>파일 선택</b> — 아래 <b>CSV 파일 선택</b>으로 파일을 고르면, 추가하기 전에 미리보기로 내용을 확인할 수 있어요. 이상이 없으면 <b>추가</b>를 눌러요.</li>
+    </ol>
+    <p class="note warn">내역에는 개인 금융정보가 들어 있어요. AI에 올리기 전에 계좌번호·카드번호·이름은 지우는 게 좋아요. Fincore는 고른 CSV 파일을 서버로 보내지 않고 이 브라우저 안에서만 읽어요.</p>
+    <h3 class="ph" style="margin-top:6px"><span>AI에게 보낼 프롬프트</span></h3>
+    <textarea class="promptbox" id="csvprompt" readonly aria-label="AI에게 보낼 프롬프트">${esc(csvPrompt())}</textarea>
+    <div class="acts" style="justify-content:flex-start;margin:10px 0 20px"><button class="btn" type="button" data-act="csv-copy">프롬프트 복사</button><button class="btn ghost" type="button" data-act="csv-sample">예시 CSV 내려받기</button></div>
+    <h3 class="ph"><span>CSV 형식</span></h3>
+    <table class="colt"><tbody>${cell('날짜', 'YYYY-MM-DD (예: 2026-11-04) — 필수')}${cell('시간', 'HH:MM, 24시간제 (예: 13:45) — 없으면 비워도 돼요')}${cell('카테고리', '설정에 있는 분류 이름 (비우면 "미분류", 목록에 없으면 새 분류로 추가)')}${cell('액수', '원 단위 숫자 — 지출은 음수(-12000), 수입은 양수(3000000) — 필수')}${cell('메모', '가맹점·거래 내용 (60자까지)')}</tbody></table>
+    <p class="sub" style="margin:0 0 18px">첫 줄은 <b>날짜,시간,카테고리,액수,메모</b> 입니다. 이미 있는 내역과 같은 줄은 미리보기에서 중복으로 표시돼요.</p>
+    <div class="acts"><button class="btn ghost" type="button" data-act="close">닫기</button><button class="btn" type="button" data-act="csv-pick">CSV 파일 선택</button></div>`;
+}
+function renderPreview() {
+  const P = buildPreview(), { name, opts, parsed } = ImportState, n = P.add.length;
+  const tag = t => `<span class="tag ${t === 'out' ? 'out' : ''}">${t === 'out' ? '지출' : '수입'}</span>`;
+  const rows = P.items.slice(0, 200).map(x => `<tr class="${x.dup ? 'dup' : ''}"><td>${dShort(x.d)}</td><td>${x.tm || ''}</td><td>${tag(x.type)}${esc(x.cat)}${x.isNew ? '<em>새 분류</em>' : ''}</td><td class="r ${x.type === 'out' ? 'neg' : 'pos'}">${x.type === 'out' ? '-' : '+'}${nf.format(x.amt)}</td><td class="m">${esc(x.memo)}</td><td>${x.dup ? '중복' : ''}</td></tr>`).join('');
+  const more = P.items.length > 200 ? `<p class="sub">표에는 처음 200건만 보여 줍니다. 추가할 때는 모두 포함돼요.</p>` : '';
+  const errs = P.errs.length ? `<p class="lbl" style="margin:0 0 6px">읽지 못한 줄 ${P.errs.length}개 (추가되지 않아요)</p><ul class="errlist">${P.errs.slice(0, 20).map(e => `<li>${e.line}번째 줄 · ${esc(e.error)}</li>`).join('')}${P.errs.length > 20 ? `<li>…외 ${P.errs.length - 20}줄</li>` : ''}</ul>` : '';
+  const unk = P.items.some(x => x.isNew) || opts.other;
+  const nc = ['in', 'out'].filter(t => P.newCats[t].length).map(t => `${t === 'in' ? '수입' : '지출'}: ${P.newCats[t].map(esc).join(', ')}`).join(' / ');
+  openDlg('CSV 미리보기', `<p class="sub" style="margin:0 0 10px">${esc(name)}</p>
+    <div class="stats c4"><div class="stat"><div class="lbl">전체</div><div class="mid">${nf.format(parsed.rows.length)}</div></div><div class="stat"><div class="lbl">추가</div><div class="mid pos">${nf.format(n)}</div></div><div class="stat"><div class="lbl">중복</div><div class="mid">${nf.format(P.dups)}</div></div><div class="stat"><div class="lbl">오류</div><div class="mid ${P.errs.length ? 'neg' : ''}">${nf.format(P.errs.length)}</div></div></div>
+    <div style="height:14px"></div>
+    ${rows ? `<div class="tblwrap"><table class="itable"><thead><tr><th>날짜</th><th>시간</th><th>분류</th><th>액수</th><th>메모</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${more}` : '<p class="empty-s">추가할 수 있는 줄이 없습니다.</p>'}
+    ${errs}
+    ${P.dups || opts.incDup ? `<label class="chk"><input type="checkbox" data-imp="incDup" ${opts.incDup ? 'checked' : ''}><span>중복으로 보이는 ${P.dups}건도 함께 추가</span></label>` : ''}
+    ${unk ? `<label class="chk"><input type="checkbox" data-imp="other" ${opts.other ? 'checked' : ''}><span>목록에 없는 분류는 새로 만들지 않고 "기타 수입 / 기타 지출"로 넣기</span></label>` : ''}
+    ${nc ? `<p class="note">새로 추가되는 분류 — ${nc}</p>` : ''}
+    <div class="acts"><button class="btn ghost sp" type="button" data-act="csv-open">다른 파일 선택</button><button class="btn ghost" type="button" data-act="close">취소</button><button class="btn" type="button" data-act="csv-go" ${n ? '' : 'disabled'}>${nf.format(n)}건 추가</button></div>`, dlg, true);
+}
+async function csvFile(e) {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  if (f.size > CSV_MAX_BYTES) return toast('파일이 너무 큽니다. (2MB 이하)');
+  let text;
+  try {
+    const buf = await f.arrayBuffer();
+    try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (x) { text = new TextDecoder('euc-kr').decode(buf); } // 엑셀이 저장한 한글 CSV(CP949)도 읽는다
+  } catch (x) { return toast('파일을 읽을 수 없습니다.'); }
+  const parsed = readCsv(text);
+  if (parsed.fatal) { openDlg('CSV를 읽을 수 없습니다', `<p class="err" style="min-height:0;margin-bottom:16px">${esc(parsed.fatal)}</p><div class="acts"><button class="btn" type="button" data-act="csv-open">안내로 돌아가기</button></div>`, dlg, true); return; }
+  ImportState = { name: f.name, parsed, opts: { other: false, incDup: false } };
+  renderPreview();
+}
+$('#csvfile').onchange = csvFile;
+async function copyText(text, area) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  try { area.focus(); area.select(); return document.execCommand('copy'); } catch (e) { return false; }
+}
+// 방금 CSV로 추가한 내역을 그날 안에는 한 번에 되돌릴 수 있다.
+function importNote() {
+  const li = S.ext.lastImport; if (!isObj(li) || li.at !== today()) return '';
+  const n = S.flows.filter(f => f.b === li.b).length; if (!n) return '';
+  return `<div class="panel" style="margin-bottom:18px;padding:12px 16px"><div class="toolbar" style="margin:0"><span>방금 CSV로 <b>${nf.format(n)}건</b>을 추가했습니다.</span><span class="grp"><button class="btn danger sm" data-act="imp-undo">이 ${nf.format(n)}건 되돌리기</button><button class="btn ghost sm" data-act="imp-dismiss">닫기</button></span></div></div>`;
+}
+Object.assign(Actions, {
+  'csv-open'() { openDlg('CSV로 일괄 추가', csvGuide(), dlg, true); },
+  'csv-pick'() { $('#csvfile').click(); },
+  async 'csv-copy'(d, t) {
+    const ok = await copyText(csvPrompt(), $('#csvprompt'));
+    toast(ok ? '프롬프트를 복사했습니다. AI 채팅창에 붙여넣으세요.' : '복사하지 못했습니다. 상자를 눌러 전체 선택한 뒤 직접 복사해 주세요.');
+    if (ok) { const old = t.textContent; t.textContent = '복사됨'; setTimeout(() => { if (t.isConnected) t.textContent = old; }, 1800); }
+  },
+  'csv-sample'() { download('fincore-sample.csv', '\uFEFF' + CSV_SAMPLE, 'text/csv;charset=utf-8'); },
+  'csv-go'() {
+    if (!ImportState) return;
+    const P = buildPreview(); if (!P.add.length) return toast('추가할 내역이 없습니다.');
+    const b = uid(), base = Date.now();
+    for (const t of ['in', 'out']) P.newCats[t].forEach(c => { if (!S.cats[t].some(x => x.toLowerCase() === c.toLowerCase())) S.cats[t].push(c); });
+    P.add.forEach((x, i) => {
+      const r = { id: uid() + i.toString(36), t: base + i, type: x.type, d: x.d, amt: x.amt, cat: x.cat, memo: x.memo, b };
+      if (x.tm) r.tm = x.tm;
+      S.flows.push(r);
+    });
+    S.ext.lastImport = { b, n: P.add.length, at: today() };
+    UI.month = P.add.map(x => x.d).sort().pop().slice(0, 7); UI.ftype = 'all';
+    const n = P.add.length; ImportState = null; dlg.close();
+    commit(`${nf.format(n)}건을 추가했습니다.`);
+  },
+  'imp-undo'() {
+    const li = S.ext.lastImport; if (!isObj(li)) return;
+    const n = S.flows.filter(f => f.b === li.b).length;
+    askConfirm(`CSV로 추가한 ${nf.format(n)}건을 모두 삭제할까요?<br><span class="sub">그 사이 직접 고친 내용도 함께 사라집니다. 이때 새로 만든 분류는 남습니다.</span>`, () => {
+      S.flows = S.flows.filter(f => f.b !== li.b); delete S.ext.lastImport; commit('되돌렸습니다.');
+    }, '되돌리기');
+  },
+  'imp-dismiss'() { delete S.ext.lastImport; commit(); }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset && t.dataset.imp && ImportState) { ImportState.opts[t.dataset.imp] = t.checked; renderPreview(); const c = $(`[data-imp="${t.dataset.imp}"]`); if (c) c.focus({ preventScroll: true }); }
+});
+
 /* ---------- 폼 처리 ---------- */
 const fail = (f, m) => { const p = $('.err', f); if (p) p.textContent = m; };
 // 가치 기록 한 건. 달러 자산은 기록할 때 설정돼 있던 환율(fx)을 함께 남긴다.
@@ -912,8 +1172,9 @@ Object.assign(Forms, {
     const pick = fd.get('catpick'), cat = pick === '__new' ? String(fd.get('cat') || '').trim().slice(0, 20) : String(pick || '');
     if (!cat) return fail(f, pick === '__new' ? '새 분류 이름을 입력하세요.' : '분류를 선택하세요.');
     if (!S.cats[type].some(c => c.toLowerCase() === cat.toLowerCase()) && pick === '__new') S.cats[type].push(cat);
-    const rec = { type, d, amt, cat, memo: String(fd.get('memo') || '').trim() };
-    if (id) { const x = S.flows.find(y => y.id === id); if (!x) return gone(); Object.assign(x, rec); }
+    const tm = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(fd.get('tm') || '')) ? String(fd.get('tm')) : '';
+    const rec = { type, d, amt, cat, memo: String(fd.get('memo') || '').trim(), ...(tm ? { tm } : {}) };
+    if (id) { const x = S.flows.find(y => y.id === id); if (!x) return gone(); Object.assign(x, rec); if (!tm) delete x.tm; }
     else S.flows.push(Object.assign({ id: uid(), t: Date.now() }, rec));
     UI.month = d.slice(0, 7); dlg.close(); commit(id ? '저장했습니다.' : '추가했습니다.');
   },
