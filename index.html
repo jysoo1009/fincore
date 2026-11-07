@@ -148,6 +148,7 @@ div.f{margin:0 0 14px}
 .btn:hover{background:var(--g700)}
 .btn[disabled]{opacity:.45;cursor:not-allowed}
 .btn[disabled]:hover{background:var(--g800)}
+[hidden]{display:none!important}
 dialog.wide{width:min(780px,calc(100% - 24px))}
 .steps{margin:0 0 16px;padding-left:22px;display:grid;gap:9px;font-size:14.5px}
 .steps li::marker{font-weight:700;color:var(--g700)}
@@ -367,6 +368,7 @@ const DEFAULT_CATS = {
 
 /* ---------- 저장소 ---------- */
 const ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
+const SYM_RE = /^[A-Z0-9][A-Z0-9.^=-]{0,14}$/; // 주식 종목코드 (005930, AAPL, BRK-B ...)
 const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
 const Store = {
   KEY: 'fincore.v1',
@@ -404,7 +406,9 @@ const Store = {
         if (!isObj(e) || !validDate(e.d) || !isFinite(v) || v < 0) { dropped++; continue; }
         byDate.set(e.d, cur === 'USD' && fx > 0 && isFinite(fx) ? { d: e.d, v, fx } : { d: e.d, v });
       }
-      return { id: cleanId(a.id), name: str(a.name, 40) || '이름 없음', kind: KIND[a.kind] ? a.kind : 'etc', cur, note: str(a.note, 60), h: [...byDate.values()].sort((x, y) => x.d < y.d ? -1 : 1) };
+      const sk = isObj(a.stock) ? a.stock : null, sym = sk ? String(sk.sym ?? '').toUpperCase() : '', sq = sk ? toNum(sk.qty) : NaN, pos = x => { const v = toNum(x); return v > 0 && isFinite(v) ? v : null; };
+      const stock = sk && SYM_RE.test(sym) && sq > 0 && isFinite(sq) ? { sym, qty: sq, px: pos(sk.px), prev: pos(sk.prev), at: pos(sk.at) || 0, ...(SYM_RE.test(String(sk.rs ?? '')) ? { rs: String(sk.rs) } : {}) } : null;
+      return { id: cleanId(a.id), name: str(a.name, 40) || '이름 없음', kind: KIND[a.kind] ? a.kind : 'etc', cur, note: str(a.note, 60), h: [...byDate.values()].sort((x, y) => x.d < y.d ? -1 : 1), ...(stock ? { stock } : {}) };
     });
     const flows = (Array.isArray(r.flows) ? r.flows : []).filter(x => {
       const ok = isObj(x) && validDate(x.d) && (x.type === 'in' || x.type === 'out') && toNum(x.amt) > 0 && isFinite(toNum(x.amt));
@@ -570,7 +574,7 @@ function flowRow(f) {
 }
 function assetRow(a) {
   const last = curEntry(a), v = last ? last.v : 0, krw = a.cur === 'USD';
-  return `<button class="row" data-act="asset-open" data-id="${esc(a.id)}"><span><span class="t">${esc(a.name)}</span><span class="s">${esc(a.note || (last ? dShort(last.d) + ' 기준' : '기록 없음'))}</span></span><span class="v ${isDebt(a) ? 'neg' : ''}">${fmt(v, a.cur)}${krw ? `<small>약 ${kor(toKRW(v, a.cur))}</small>` : (last && a.note ? `<small>${dShort(last.d)} 기준</small>` : '')}</span></button>`;
+  return `<button class="row" data-act="asset-open" data-id="${esc(a.id)}"><span><span class="t">${esc(a.name)}</span><span class="s">${a.stock ? stockLine(a) : esc(a.note || (last ? dShort(last.d) + ' 기준' : '기록 없음'))}</span></span><span class="v ${isDebt(a) ? 'neg' : ''}">${fmt(v, a.cur)}${krw ? `<small>약 ${kor(toKRW(v, a.cur))}</small>` : (last && a.note ? `<small>${dShort(last.d)} 기준</small>` : '')}</span></button>`;
 }
 function emptyBox(msg, btns) { return `<div class="empty"><p>${msg}</p><div class="acts" style="justify-content:center">${btns}</div></div>`; }
 
@@ -665,7 +669,8 @@ defineModule({ id: 'home', label: '대시보드', icon: 'home', order: 10, rende
 
 defineModule({ id: 'assets', label: '자산·부채', icon: 'assets', order: 20, render(el) {
   const t = totals();
-  const tb = `<span class="sub">항목을 누르면 가치 기록을 볼 수 있습니다.</span><button class="btn" data-act="asset-new">${icon('plus')}자산·부채 추가</button>`;
+  const hasStock = S.assets.some(a => a.stock);
+  const tb = `<span class="sub${Quotes.err ? ' neg' : ''}" id="qstat">${hasStock ? esc(quoteStatus()) : '항목을 누르면 가치 기록을 볼 수 있습니다.'}</span><span class="grp">${hasStock ? `<button class="btn ghost" data-act="quotes-refresh" ${Quotes.busy ? 'disabled' : ''}>시세 새로고침</button>` : ''}<button class="btn" data-act="asset-new">${icon('plus')}자산·부채 추가</button></span>`;
   let body;
   if (!S.assets.length) body = panel('자산·부채', emptyBox('등록된 자산이나 부채가 없습니다.', `<button class="btn" data-act="asset-new">${icon('plus')}자산·부채 추가</button>`));
   else {
@@ -743,25 +748,29 @@ function askConfirm(msg, fn, label = '삭제') {
 const money = (name, label, v = '', cur = 'KRW') => `<label class="f"><span>${label}</span><input name="${name}" inputmode="decimal" autocomplete="off" data-money="${name}" value="${esc(v)}" required><div class="hint" data-hint="${name}"></div></label>`;
 
 function assetForm(a) {
-  const n = !a;
+  const n = !a, st = a?.stock;
+  const modeSeg = n ? `<div class="f"><span class="fl">입력 방식</span><div class="seg"><label><input type="radio" name="mode" value="manual" checked>직접 입력</label><label><input type="radio" name="mode" value="stock">주식 (종목코드·수량)</label></div></div>` : '';
+  const sb = n || st ? `<div class="sf" ${n ? 'hidden' : ''}><div class="two"><label class="f"><span>종목코드</span><input name="sym" maxlength="15" value="${esc(st?.sym || '')}" placeholder="005930 또는 AAPL" autocapitalize="characters" autocomplete="off" ${st ? 'disabled' : ''}></label><label class="f"><span>수량 (주)</span><input name="qty" inputmode="decimal" autocomplete="off" value="${st ? esc(st.qty) : ''}" placeholder="10"></label></div><p class="hint" style="margin-top:-6px">${st ? '종목코드는 바꿀 수 없습니다. 다른 종목이라면 새 항목으로 추가하세요.' : '한국 주식은 6자리 코드(005930), 미국 주식은 티커(AAPL)를 입력하세요. 현재가를 자동으로 불러와 수량 × 현재가를 가치로 기록하고, 이후에도 계속 갱신합니다. 원화·달러 종목만 지원합니다.'}</p></div>` : '';
   // 통화는 새로 만들 때만 고를 수 있다. 바꾸면 과거 기록 숫자의 의미가 통째로 바뀌기 때문.
   return `<form data-form="asset" novalidate><input type="hidden" name="id" value="${a ? esc(a.id) : ''}">
-    <label class="f"><span>이름</span><input name="name" maxlength="40" value="${esc(a?.name || '')}" placeholder="예: 생활비 통장" required></label>
+    ${modeSeg}<label class="f"><span>이름</span><input name="name" maxlength="40" value="${esc(a?.name || '')}" placeholder="예: 생활비 통장" required></label>
     <div class="two"><label class="f"><span>종류</span><select name="kind">${Object.keys(KIND).map(k => `<option value="${k}" ${a?.kind === k ? 'selected' : ''}>${KIND[k].label}</option>`).join('')}</select></label>
-    <label class="f"><span>통화</span><select name="cur" ${n ? '' : 'disabled aria-describedby="cur-hint"'}><option value="KRW" ${a?.cur !== 'USD' ? 'selected' : ''}>원 (KRW)</option><option value="USD" ${a?.cur === 'USD' ? 'selected' : ''}>달러 (USD)</option></select>${n ? '' : '<div class="hint" id="cur-hint">통화는 바꿀 수 없습니다. 다른 통화라면 새 항목으로 추가하세요.</div>'}</label></div>
-    ${n ? `<div class="two">${money('v', '현재 가치')}<label class="f"><span>기준일</span><input type="date" name="d" value="${today()}" max="${today()}" required></label></div>` : ''}
+    <label class="f${n ? ' mf' : ''}"><span>통화</span><select name="cur" ${n ? '' : 'disabled aria-describedby="cur-hint"'}><option value="KRW" ${a?.cur !== 'USD' ? 'selected' : ''}>원 (KRW)</option><option value="USD" ${a?.cur === 'USD' ? 'selected' : ''}>달러 (USD)</option></select>${n ? '' : '<div class="hint" id="cur-hint">통화는 바꿀 수 없습니다. 다른 통화라면 새 항목으로 추가하세요.</div>'}</label></div>
+    ${sb}
+    ${n ? `<div class="mf"><div class="two">${money('v', '현재 가치')}<label class="f"><span>기준일</span><input type="date" name="d" value="${today()}" max="${today()}" required></label></div></div>` : ''}
     <label class="f"><span>메모 (선택)</span><input name="note" maxlength="60" value="${esc(a?.note || '')}"></label>
-    ${n ? '<p class="hint" style="margin-top:-6px">부채는 갚아야 할 잔액을 양수로 입력하세요.</p>' : ''}
+    ${n ? '<p class="hint mf" style="margin-top:-6px">부채는 갚아야 할 잔액을 양수로 입력하세요.</p>' : ''}
     <p class="err"></p><div class="acts"><button class="btn ghost" type="button" data-act="close">취소</button><button class="btn" type="submit">${n ? '추가' : '저장'}</button></div></form>`;
 }
 function openAsset(id) {
   const a = S.assets.find(x => x.id === id); if (!a) { if (dlg.open) dlg.close(); return; }
-  const id_ = esc(a.id), usd = a.cur === 'USD';
+  const id_ = esc(a.id), usd = a.cur === 'USD', st = a.stock;
   const rows = [...a.h].map((e, i) => ({ e, i })).reverse().map(({ e, i }) => `<tr><td>${esc(e.d)}${e.d > today() ? '<small>미래 날짜</small>' : ''}</td><td>${fmt(e.v, a.cur)}${usd && e.fx ? `<small>@${nf.format(e.fx)}원</small>` : ''}</td><td><button data-act="val-del" data-id="${id_}" data-d="${esc(e.d)}" aria-label="${esc(e.d)} 기록 삭제">×</button></td></tr>`).join('');
-  openDlg(a.name, `<div class="lbl">${KIND[a.kind].label} · ${usd ? '달러' : '원화'}</div><div class="big ${isDebt(a) ? 'neg' : ''}" style="font-size:32px">${fmt(curVal(a), a.cur)}</div>${usd ? `<div class="sub">약 ${kor(toKRW(curVal(a), a.cur))} (현재 환율 ${nf.format(S.settings.usdkrw)}원)</div>` : ''}
+  openDlg(a.name, `<div class="lbl">${KIND[a.kind].label} · ${usd ? '달러' : '원화'}${st ? ' · 시세 연동' : ''}</div><div class="big ${isDebt(a) ? 'neg' : ''}" style="font-size:32px">${fmt(curVal(a), a.cur)}</div>${usd ? `<div class="sub">약 ${kor(toKRW(curVal(a), a.cur))} (현재 환율 ${nf.format(S.settings.usdkrw)}원)</div>` : ''}${st ? stockInfo(a) : ''}
     <h3 class="ph" style="margin-top:20px"><span>가치 기록</span></h3>
     ${a.h.length ? `<table class="htable"><tbody>${rows}</tbody></table>` : '<p class="empty-s">기록이 없습니다.</p>'}
-    <form data-form="val" novalidate><input type="hidden" name="id" value="${id_}"><input type="hidden" name="cur" value="${a.cur}"><div class="two">${money('v', '새 가치')}<label class="f"><span>기준일</span><input type="date" name="d" value="${today()}" max="${today()}" required></label></div>
+    ${st ? stockActs(id_) : ''}
+    <form data-form="val" novalidate ${st ? 'hidden' : ''}><input type="hidden" name="id" value="${id_}"><input type="hidden" name="cur" value="${a.cur}"><div class="two">${money('v', '새 가치')}<label class="f"><span>기준일</span><input type="date" name="d" value="${today()}" max="${today()}" required></label></div>
     <p class="err"></p><div class="acts"><button class="btn danger sp" type="button" data-act="asset-del" data-id="${id_}">삭제</button><button class="btn ghost" type="button" data-act="asset-edit" data-id="${id_}">정보 수정</button><button class="btn" type="submit">기록 추가</button></div></form>`);
   dlg.dataset.asset = a.id;
 }
@@ -1135,6 +1144,102 @@ document.addEventListener('change', e => {
   if (t.dataset && t.dataset.imp && ImportState) { ImportState.opts[t.dataset.imp] = t.checked; renderPreview(); const c = $(`[data-imp="${t.dataset.imp}"]`); if (c) c.focus({ preventScroll: true }); }
 });
 
+/* ---------- 주식 시세 (종목코드 + 수량) ---------- */
+// 시세는 같은 사이트의 /api/quote (Vercel 서버 함수)가 Yahoo Finance에서 받아 와 전달한다. 브라우저가 직접 부르면 CORS로 막힌다.
+// 주식 자산은 a.stock = { sym, qty, px, prev, at, rs } 를 갖고, 시세를 받을 때마다 '오늘' 가치 기록(수량 × 현재가)을 갱신한다.
+const Quotes = { busy: false, last: 0, err: '' };
+async function fetchQuotes(syms) {
+  const r = await fetch('/api/quote?s=' + encodeURIComponent(syms.join(',')), { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json(); if (!isObj(j)) throw new Error('bad response');
+  return j;
+}
+const hhmm = ms => { const d = new Date(ms); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+const parseQty = s => num(String(s ?? '').replace(/주/g, ''));
+const QTY_ERR = '수량을 0보다 큰 숫자로 입력하세요. (예: 10, 0.5)';
+function stockValue(a) {
+  const st = a.stock; if (!st || !(st.px > 0)) return;
+  const d = today(), e = entry(st.qty * st.px, d, a.cur), i = a.h.findIndex(x => x.d === d);
+  if (i >= 0) a.h[i] = e; else { a.h.push(e); a.h.sort((x, y) => x.d < y.d ? -1 : 1); }
+}
+function applyQuote(a, q) {
+  const st = a.stock;
+  st.px = q.price; st.prev = q.prev > 0 ? q.prev : null; st.at = q.t > 0 ? q.t * 1000 : Date.now();
+  if (typeof q.sym === 'string' && SYM_RE.test(q.sym)) st.rs = q.sym;
+  stockValue(a);
+}
+const chg = st => {
+  if (!(st.px > 0 && st.prev > 0)) return '';
+  const p = (st.px / st.prev - 1) * 100;
+  if (Math.abs(p) < 0.005) return '<span>0.00%</span>';
+  return `<span class="${p < 0 ? 'neg' : 'pos'}">${p < 0 ? '▼' : '▲'} ${Math.abs(p).toFixed(2)}%</span>`;
+};
+function stockLine(a) {
+  const st = a.stock;
+  return `${esc(st.sym)} · ${nf.format(st.qty)}주 · ${st.px > 0 ? fmt(st.px, a.cur) + ' ' + chg(st) : '시세 대기 중'}${a.note ? ' · ' + esc(a.note) : ''}`;
+}
+function stockInfo(a) {
+  const st = a.stock;
+  return `<dl class="kv" style="margin:14px 0 0"><dt>종목코드</dt><dd>${esc(st.sym)}${st.rs && st.rs !== st.sym ? ` <span class="sub">(${esc(st.rs)})</span>` : ''}</dd><dt>수량</dt><dd>${nf.format(st.qty)}주</dd><dt>현재가</dt><dd>${st.px > 0 ? fmt(st.px, a.cur) + ' ' + chg(st) : '아직 받지 못함'}</dd>${st.px > 0 && st.prev > 0 ? `<dt>전일 종가</dt><dd>${fmt(st.prev, a.cur)}</dd>` : ''}<dt>시세 시각</dt><dd>${st.at ? new Date(st.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '-'}</dd></dl>
+    <p class="hint">가치 = 수량 × 현재가. 하루에 한 건씩, 그날 마지막으로 받은 시세로 기록돼 추이 그래프에 쓰입니다.</p>`;
+}
+const stockActs = id => `<div class="acts"><button class="btn danger sp" type="button" data-act="asset-del" data-id="${id}">삭제</button><button class="btn ghost" type="button" data-act="asset-edit" data-id="${id}">수량 수정</button><button class="btn" type="button" data-act="quotes-refresh">시세 새로고침</button></div>`;
+function quoteStatus() {
+  if (Quotes.busy) return '시세 불러오는 중…';
+  if (Quotes.err) return Quotes.err;
+  if (Quotes.last) return `시세 ${hhmm(Quotes.last)} 확인 · 무료 시세라 몇 분 늦을 수 있고, 장이 닫혀 있으면 마지막 종가입니다.`;
+  return '시세를 아직 불러오지 않았습니다.';
+}
+function paintQuoteStatus() {
+  const s = $('#qstat'); if (s) { s.textContent = quoteStatus(); s.className = 'sub' + (Quotes.err ? ' neg' : ''); }
+  $$('[data-act="quotes-refresh"]').forEach(b => { b.disabled = Quotes.busy; });
+}
+// 시세가 바뀌면 화면을 다시 그린다. 입력 중인 칸이 있으면 건드리지 않는다.
+function softRender() {
+  const ae = document.activeElement, typing = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && $('#view').contains(ae);
+  if (!typing && !Store.problem && ['home', 'assets'].includes(curPage())) render(); else paintQuoteStatus();
+  if (dlg.open && dlg.dataset.asset) { const a = S.assets.find(x => x.id === dlg.dataset.asset); if (a && a.stock) openAsset(a.id); }
+}
+async function refreshStocks(manual) {
+  if (!S.assets.some(a => a.stock) || Quotes.busy || Store.problem) return;
+  Quotes.busy = true; paintQuoteStatus();
+  let n = 0, bad = 0;
+  try {
+    const data = await fetchQuotes([...new Set(S.assets.filter(a => a.stock).map(a => a.stock.sym))]);
+    for (const a of S.assets.filter(x => x.stock)) { // 기다리는 사이 다른 탭에서 데이터가 바뀌었을 수 있어 현재 S에서 다시 찾는다
+      const q = data[a.stock.sym];
+      if (q && q.price > 0 && q.cur === a.cur) { applyQuote(a, q); n++; } else bad++;
+    }
+    Quotes.last = Date.now(); Quotes.err = bad ? `${bad}개 종목의 시세를 받지 못했습니다.` : '';
+    if (n) Store.save(S);
+  } catch (e) { Quotes.err = '시세 서버에 연결하지 못했습니다. 마지막으로 받은 값을 보여 드립니다.'; }
+  Quotes.busy = false;
+  softRender();
+  if (manual) toast(Quotes.err || '시세를 새로 불러왔습니다.');
+}
+async function addStock(f, fd, name, kind, note) {
+  const sym = String(fd.get('sym') || '').trim().toUpperCase(), qty = parseQty(fd.get('qty'));
+  if (!SYM_RE.test(sym)) return fail(f, '종목코드를 확인하세요. (예: 005930, AAPL)');
+  if (!(qty > 0)) return fail(f, QTY_ERR);
+  const btn = $('button[type="submit"]', f), label = btn.textContent;
+  btn.disabled = true; btn.textContent = '시세 확인 중…'; fail(f, '');
+  try {
+    const q = (await fetchQuotes([sym]))[sym];
+    if (!q || q.error === 'not_found' || q.error === 'bad_symbol') return fail(f, '종목을 찾을 수 없습니다. 코드를 확인하세요. (한국 005930, 미국 AAPL)');
+    if (q.error || !(q.price > 0)) return fail(f, '시세를 받지 못했습니다. 잠시 뒤 다시 시도하세요.');
+    if (q.cur !== 'KRW' && q.cur !== 'USD') return fail(f, `${esc(q.cur || '')} 통화 종목은 아직 지원하지 않습니다. (원화·달러만)`);
+    const a = { id: uid(), name: (name || q.name || sym).slice(0, 40), kind, cur: q.cur, note, h: [], stock: { sym, qty, px: null, prev: null, at: 0 } };
+    applyQuote(a, q); S.assets.push(a); Quotes.last = Date.now(); Quotes.err = '';
+    dlg.close(); commit('추가했습니다.');
+  } catch (e) { fail(f, '시세 서버에 연결하지 못했습니다. 인터넷 연결을 확인하세요.'); }
+  finally { if (btn.isConnected) { btn.disabled = false; btn.textContent = label; } }
+}
+// 시세만 바뀐 저장은 '다른 탭에서 바뀐 내용' 안내를 띄우지 않기 위한 비교용 값
+const quietSig = s => JSON.stringify([s.settings, s.cats, s.flows, s.ext, s.assets.map(a => a.stock ? { ...a, stock: { sym: a.stock.sym, qty: a.stock.qty }, h: a.h.filter(e => e.d !== today()) } : a)]);
+Object.assign(Actions, { 'quotes-refresh'() { refreshStocks(true); } });
+setInterval(() => { if (!document.hidden) refreshStocks(); }, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - Quotes.last > 30000) refreshStocks(); });
+
 /* ---------- 폼 처리 ---------- */
 const fail = (f, m) => { const p = $('.err', f); if (p) p.textContent = m; };
 // 가치 기록 한 건. 달러 자산은 기록할 때 설정돼 있던 환율(fx)을 함께 남긴다.
@@ -1143,11 +1248,14 @@ const VAL_ERR = '가치를 0 이상의 숫자로 입력하세요. (예: 3000000,
 Object.assign(Forms, {
   asset(f, fd) {
     const name = String(fd.get('name') || '').trim(), id = fd.get('id'), kind = KIND[fd.get('kind')] ? fd.get('kind') : 'etc', note = String(fd.get('note') || '').trim();
-    if (!name) return fail(f, '이름을 입력하세요.');
+    const stockNew = !id && fd.get('mode') === 'stock';
+    if (!name && !stockNew) return fail(f, '이름을 입력하세요.');
     if (id) { // 정보 수정: 통화는 바꾸지 않는다
       const a = S.assets.find(x => x.id === id); if (!a) return gone();
+      if (a.stock) { const q = parseQty(fd.get('qty')); if (!(q > 0)) return fail(f, QTY_ERR); a.stock.qty = q; stockValue(a); }
       Object.assign(a, { name, kind, note }); dlg.close(); commit('저장했습니다.'); return;
     }
+    if (stockNew) return addStock(f, fd, name, kind, note);
     const cur = fd.get('cur') === 'USD' ? 'USD' : 'KRW', v = num(fd.get('v')), d = fd.get('d');
     if (isNaN(v) || v < 0) return fail(f, VAL_ERR);
     if (!validDate(d)) return fail(f, '기준일을 확인하세요.');
@@ -1200,6 +1308,12 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.name === 'mode' && t.form && t.form.dataset.form === 'asset') {
+    const st = t.value === 'stock'; $$('.mf', t.form).forEach(x => { x.hidden = st; }); $('.sf', t.form).hidden = !st;
+    if (st) $('[name="kind"]', t.form).value = 'invest';
+    $('[name="name"]', t.form).placeholder = st ? '비워 두면 종목 이름을 자동으로 넣습니다' : '예: 생활비 통장';
+    const er = $('.err', t.form); if (er) er.textContent = '';
+  }
   if (t.name === 'cur' && t.form && t.form.dataset.form === 'asset') { const m = $('[data-money]', t.form); if (m) m.dispatchEvent(new Event('input', { bubbles: true })); }
   if (t.name === 'type' && t.form && t.form.dataset.form === 'flow') { catSet(t.form, t.value, null); const b = $('#catbtn', t.form); b.setAttribute('aria-expanded', 'false'); $('#catlist', t.form).hidden = true; }
   if (t.name === 'type' && t.form) { const er = $('.err', t.form); if (er) er.textContent = ''; }
@@ -1243,9 +1357,9 @@ function render() {
 // 다른 탭에서 저장하면 이 탭의 데이터도 다시 읽는다. (오래된 데이터로 덮어쓰는 것 방지)
 addEventListener('storage', e => {
   if (e.key !== Store.KEY && e.key !== null) return;
-  S = Store.load(); render();
+  const before = quietSig(S); S = Store.load(); render();
   if (dlg.open && dlg.dataset.asset) openAsset(dlg.dataset.asset);
-  toast('다른 탭에서 바뀐 내용을 반영했습니다.');
+  if (before !== quietSig(S)) toast('다른 탭에서 바뀐 내용을 반영했습니다.');
 });
 let lastW = innerWidth, rt;
 addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (innerWidth !== lastW) { lastW = innerWidth; render(); } }, 160); });
@@ -1280,6 +1394,7 @@ function demoData() {
 }
 
 render();
+refreshStocks();
 </script>
 </body>
 </html>
