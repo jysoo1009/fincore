@@ -1,5 +1,6 @@
 // Vercel 서버 함수: GET /api/quote?s=005930,AAPL
 // Yahoo Finance 차트 API에서 현재가와 전일 종가를 받아 와 돌려준다. (브라우저가 직접 부르면 CORS로 막혀서 서버가 대신 부른다)
+// 환율도 같은 방식으로 받는다: s=KRW=X (1달러 = 원). 한글 이름이 필요하면 &n=1
 // 응답: { "005930": { sym:"005930.KS", price, prev, cur:"KRW", name, t:<거래소 시각(초)> }, "ZZZZ": { error:"not_found" } }
 const SYM = /^[A-Z0-9][A-Z0-9.^=-]{0,14}$/;
 const KR = /^\d{4}[0-9A-Z]{2}$/; // 한국 종목코드(6자리). 코스피(.KS)와 코스닥(.KQ)을 모두 찾는다.
@@ -25,7 +26,18 @@ async function chart(sym) {
   return { sym: m.symbol, price: m.regularMarketPrice, prev: prev > 0 ? prev : null, cur: m.currency, name: m.longName || m.shortName || '', t: m.regularMarketTime || 0 };
 }
 
+// 한국 종목의 한글 이름(네이버 증권). 가격은 쓰지 않고 이름만 가져오며, 실패하면 빈 문자열을 돌려 영문 이름을 그대로 쓴다.
+async function koName(code) {
+  try {
+    const r = await fetch('https://m.stock.naver.com/api/stock/' + encodeURIComponent(code) + '/basic', { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(4000) });
+    if (!r.ok) return '';
+    const n = (await r.json())?.stockName;
+    return typeof n === 'string' ? n.trim().slice(0, 40) : '';
+  } catch (e) { return ''; }
+}
+
 module.exports = async (req, res) => {
+  const wantName = String((req.query && req.query.n) || '') === '1';
   const raw = String((req.query && req.query.s) || '').toUpperCase();
   const list = [...new Set(raw.split(',').map(x => x.trim()).filter(Boolean))].slice(0, 30);
   if (!list.length) { res.status(400).json({ error: 'no_symbol' }); return; }
@@ -38,6 +50,7 @@ module.exports = async (req, res) => {
         // 같은 코드가 .KS에 옛 기록으로 남아 있는 경우가 있어서, 둘 다 조회해 시세 시각이 더 최근인 쪽을 쓴다.
         const got = (await Promise.all([s + '.KS', s + '.KQ'].map(c => chart(c).catch(() => null)))).filter(Boolean);
         got.sort((a, b) => b.t - a.t); q = got[0] || null;
+        if (q && wantName) { const nm = await koName(s); if (nm) q.name = nm; }
       } else q = await chart(s);
       out[s] = q || { error: 'not_found' };
     } catch (e) { out[s] = { error: 'fetch_failed' }; }
