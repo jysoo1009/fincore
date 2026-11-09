@@ -149,6 +149,17 @@ div.f{margin:0 0 14px}
 .btn[disabled]{opacity:.45;cursor:not-allowed}
 .btn[disabled]:hover{background:var(--g800)}
 [hidden]{display:none!important}
+@media (max-width:600px){.stats.c4.y4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.yt{width:100%;border-collapse:collapse;font-size:14px}
+.yt th{text-align:right;font-size:12px;color:var(--mute);font-weight:600;letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--g700)}
+.yt td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:right;font:700 14px var(--serif);white-space:nowrap}
+.yt th:first-child,.yt td:first-child{text-align:left}
+.yt tbody tr[data-act]{cursor:pointer}
+.yt tbody tr[data-act]:hover{background:var(--paper)}
+.yt td:first-child button{background:none;border:0;padding:0;margin:0;font:600 14px var(--sans);color:inherit;cursor:pointer;text-align:left}
+.yt tr.zero td{color:var(--mute);font-weight:400}
+.yt tfoot td{border-top:2px solid var(--g800);border-bottom:0;background:var(--paper2)}
+.yt tfoot td:first-child{font:700 14px var(--sans)}
 .row .s.wrap{white-space:normal;overflow:visible;text-overflow:clip}
 dialog.wide{width:min(780px,calc(100% - 24px))}
 .steps{margin:0 0 16px;padding-left:22px;display:grid;gap:9px;font-size:14.5px}
@@ -482,9 +493,9 @@ function timeline() {
 }
 const flowsOf = mk => S.flows.filter(f => f.d.slice(0, 7) === mk);
 const sumOf = (list, type) => list.filter(f => f.type === type).reduce((s, f) => s + f.amt, 0);
-function byCat(list) {
+function byCat(list, type = 'out') {
   const m = {};
-  list.filter(f => f.type === 'out').forEach(f => m[f.cat] = (m[f.cat] || 0) + f.amt);
+  list.filter(f => f.type === type).forEach(f => m[f.cat] = (m[f.cat] || 0) + f.amt);
   return Object.entries(m).sort((a, b) => b[1] - a[1]);
 }
 
@@ -560,9 +571,9 @@ function barChart(el, months) {
   });
   el.innerHTML = `<div class="legend"><span><i style="background:#2a5c40"></i>수입</span><span><i style="background:#98362a"></i>지출</span></div><svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="월별 수입과 지출 막대 그래프">${grid}${bars}</svg>`;
 }
-function catBars(list) {
-  let rows = byCat(list);
-  if (!rows.length) return '<p class="empty-s">이 달의 지출 내역이 없습니다.</p>';
+function catBars(list, type = 'out', period = '이 달') {
+  let rows = byCat(list, type);
+  if (!rows.length) return `<p class="empty-s">${period}의 ${type === 'in' ? '수입' : '지출'} 내역이 없습니다.</p>`;
   if (rows.length > 7) rows = [...rows.slice(0, 6), ['그 외 ' + (rows.length - 6) + '개 분류', rows.slice(6).reduce((s, r) => s + r[1], 0)]];
   const top = Math.max(...rows.map(r => r[1]));
   return '<div class="hbars">' + rows.map(([c, v]) => `<div class="hb"><span title="${esc(c)}">${esc(c)}</span><span class="track"><i style="width:${Math.max(2, v / top * 100)}%"></i></span><span>${kor(v)}</span></div>`).join('') + '</div>';
@@ -685,11 +696,34 @@ defineModule({ id: 'assets', label: '자산·부채', icon: 'assets', order: 20,
   el.innerHTML = page('ASSETS & LIABILITIES', '자산·부채', body, tb);
 } });
 
-const UI = { month: today().slice(0, 7), ftype: 'all' };
+const UI = { month: today().slice(0, 7), ftype: 'all', view: 'month', year: today().slice(0, 4) };
+// 현금 흐름 화면: 월별 / 연별 보기 전환
+const viewSeg = () => `<div class="seg" role="group" aria-label="보기 단위">${[['month', '월별'], ['year', '연별']].map(([v, t]) => `<button data-act="fview" data-v="${v}" aria-pressed="${UI.view === v}">${t}</button>`).join('')}</div>`;
+// 표에 넣는 짧은 금액 (1억 2,300만 → 1.23억, 250만, 9,000)
+const cmp = n => { const a = Math.abs(n), sg = n < 0 ? '-' : n > 0 ? '+' : ''; return sg + (a >= 1e8 ? +(a / 1e8).toFixed(2) + '억' : a >= 1e4 ? nf.format(Math.round(a / 1e4)) + '만' : nf.format(a)); };
+function renderYear(el) {
+  const y = UI.year, l = S.flows.filter(f => f.d.slice(0, 4) === y), i = sumOf(l, 'in'), o = sumOf(l, 'out'), n = i - o;
+  const ms = Array.from({ length: 12 }, (_, k) => { const key = y + '-' + pad(k + 1), ml = flowsOf(key); return { k: key, inc: sumOf(ml, 'in'), out: sumOf(ml, 'out'), cnt: ml.length }; });
+  const active = ms.filter(m => m.cnt).length;
+  const tb = `<div class="grp">${viewSeg()}<div class="mnav"><button data-act="year" data-d="-1" aria-label="이전 해">‹</button><b>${y}년</b><button data-act="year" data-d="1" aria-label="다음 해">›</button></div></div><span class="grp"><button class="btn ghost" data-act="csv-open">CSV로 일괄 추가</button><button class="btn" data-act="flow-new">${icon('plus')}내역 추가</button></span>`;
+  let body;
+  if (!l.length) body = panel(`${y}년`, emptyBox(`${y}년에는 기록이 없습니다.`, `<button class="btn" data-act="flow-new">${icon('plus')}내역 추가</button>`));
+  else {
+    const rows = ms.map(m => { const d = m.inc - m.out, mo = Number(m.k.slice(5)) + '월'; return m.cnt
+      ? `<tr data-act="goto-month" data-k="${m.k}"><td><button type="button" data-act="goto-month" data-k="${m.k}" aria-label="${y}년 ${mo} 내역 보기">${mo}</button></td><td class="pos" title="${esc(kor(m.inc))}">${m.inc ? cmp(m.inc) : '-'}</td><td class="neg" title="${esc(kor(m.out))}">${m.out ? cmp(-m.out) : '-'}</td><td class="${d < 0 ? 'neg' : 'pos'}" title="${esc(sgn(d))}">${cmp(d)}</td></tr>`
+      : `<tr class="zero"><td>${mo}</td><td>-</td><td>-</td><td>-</td></tr>`; }).join('');
+    const table = `<table class="yt"><thead><tr><th>월</th><th>수입</th><th>지출</th><th>순</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td>합계</td><td class="pos">${cmp(i)}</td><td class="neg">${cmp(-o)}</td><td class="${n < 0 ? 'neg' : 'pos'}">${cmp(n)}</td></tr></tfoot></table>`;
+    body = `<div class="panel"><div class="stats c4 y4"><div class="stat"><div class="lbl">수입</div><div class="mid pos">${kor(i)}</div></div><div class="stat"><div class="lbl">지출</div><div class="mid neg">${kor(o)}</div></div><div class="stat"><div class="lbl">순현금흐름</div><div class="mid ${n < 0 ? 'neg' : 'pos'}">${sgn(n)}</div><div class="sub">저축률 ${i > 0 ? Math.round(n / i * 100) + '%' : '-'}</div></div><div class="stat"><div class="lbl">월평균 지출</div><div class="mid">${kor(o / active)}</div><div class="sub">기록 있는 ${active}개월 기준</div></div></div></div>
+    <div class="grid" style="margin-top:18px"><div class="w12">${panel('월별 수입·지출', '<div class="chart"></div>', '', `${nf.format(l.length)}건`)}</div><div class="w7">${panel('월별 요약', table, '', '월을 누르면 그 달 내역')}</div><div class="w5">${panel('분류별 지출', catBars(l, 'out', y + '년'))}${panel('분류별 수입', catBars(l, 'in', y + '년'))}</div></div>`;
+  }
+  el.innerHTML = page('CASH FLOW', '현금 흐름', importNote() + body, tb);
+  const c = $('.chart', el); if (c) barChart(c, ms);
+}
 defineModule({ id: 'flow', label: '현금 흐름', icon: 'flow', order: 30, render(el) {
+  if (UI.view === 'year') return renderYear(el);
   const l = flowsOf(UI.month), i = sumOf(l, 'in'), o = sumOf(l, 'out'), n = i - o;
   const shown = l.filter(f => UI.ftype === 'all' || f.type === UI.ftype);
-  const tb = `<div class="grp"><div class="mnav"><button data-act="month" data-d="-1" aria-label="이전 달">‹</button><b>${mLabel(UI.month)}</b><button data-act="month" data-d="1" aria-label="다음 달">›</button></div></div><span class="grp"><button class="btn ghost" data-act="csv-open">CSV로 일괄 추가</button><button class="btn" data-act="flow-new">${icon('plus')}내역 추가</button></span>`;
+  const tb = `<div class="grp">${viewSeg()}<div class="mnav"><button data-act="month" data-d="-1" aria-label="이전 달">‹</button><b>${mLabel(UI.month)}</b><button data-act="month" data-d="1" aria-label="다음 달">›</button></div></div><span class="grp"><button class="btn ghost" data-act="csv-open">CSV로 일괄 추가</button><button class="btn" data-act="flow-new">${icon('plus')}내역 추가</button></span>`;
   const seg = `<div class="seg" role="group" aria-label="구분">${[['all', '전체'], ['in', '수입'], ['out', '지출']].map(([v, t]) => `<button data-act="ftype" data-v="${v}" aria-pressed="${UI.ftype === v}">${t}</button>`).join('')}</div>`;
   let list;
   if (!shown.length) list = emptyBox(l.length ? '조건에 맞는 내역이 없습니다.' : `${mLabel(UI.month)}에는 기록이 없습니다.`, `<button class="btn" data-act="flow-new">${icon('plus')}내역 추가</button>`);
@@ -804,7 +838,7 @@ function flowForm(f) {
   const n = !f, type = f?.type || 'out';
   return `<form data-form="flow" novalidate><input type="hidden" name="id" value="${f ? esc(f.id) : ''}">
     <div class="f" style="margin-bottom:14px"><span class="lbl" style="display:block;margin-bottom:5px;color:var(--g700);font-weight:700;letter-spacing:.1em;font-size:12px">구분</span><div class="seg"><label class="out"><input type="radio" name="type" value="out" ${type === 'out' ? 'checked' : ''}>지출</label><label><input type="radio" name="type" value="in" ${type === 'in' ? 'checked' : ''}>수입</label></div></div>
-    <div class="two">${money('amt', '금액 (원)', f ? f.amt : '')}<label class="f"><span>날짜</span><input type="date" name="d" value="${esc(f ? f.d : (UI.month === today().slice(0, 7) ? today() : UI.month + '-01'))}" required></label></div>
+    <div class="two">${money('amt', '금액 (원)', f ? f.amt : '')}<label class="f"><span>날짜</span><input type="date" name="d" value="${esc(f ? f.d : (UI.view === 'year' ? (UI.year === today().slice(0, 4) ? today() : UI.year + '-01-01') : UI.month === today().slice(0, 7) ? today() : UI.month + '-01'))}" required></label></div>
     ${catField(type, f?.cat)}
     <label class="f"><span>시간 (선택)</span><input type="time" name="tm" value="${esc(f?.tm || '')}"></label>
     <label class="f"><span>메모 (선택)</span><input name="memo" maxlength="60" value="${esc(f?.memo || '')}"></label>
@@ -872,6 +906,13 @@ Object.assign(Actions, {
   'flow-edit'(d) { const f = S.flows.find(x => x.id === d.id); if (!f) return gone(); openDlg('내역 수정', flowForm(f)); },
   'flow-del'(d) { const id = d.id; askConfirm('이 내역을 삭제할까요?', () => { S.flows = S.flows.filter(f => f.id !== id); dlg.close(); commit('삭제했습니다.'); }); },
   month(d) { UI.month = addMonth(UI.month, Number(d.d)); render(); },
+  fview(d) {
+    UI.view = d.v === 'year' ? 'year' : 'month';
+    if (UI.view === 'year') UI.year = UI.month.slice(0, 4); else UI.month = UI.year + UI.month.slice(4);
+    render();
+  },
+  year(d) { UI.year = String(Number(UI.year) + Number(d.d)); render(); },
+  'goto-month'(d) { if (!/^\d{4}-\d{2}$/.test(d.k || '')) return; UI.month = d.k; UI.year = d.k.slice(0, 4); UI.view = 'month'; render(); window.scrollTo(0, 0); },
   ftype(d) { UI.ftype = d.v; render(); },
   export() { exportNow(); },
   import() { $('#imp').click(); },
@@ -1129,7 +1170,7 @@ Object.assign(Actions, {
       S.flows.push(r);
     });
     S.ext.lastImport = { b, n: P.add.length, at: today() };
-    UI.month = P.add.map(x => x.d).sort().pop().slice(0, 7); UI.ftype = 'all';
+    UI.month = P.add.map(x => x.d).sort().pop().slice(0, 7); UI.year = UI.month.slice(0, 4); UI.ftype = 'all';
     const n = P.add.length; ImportState = null; dlg.close();
     commit(`${nf.format(n)}건을 추가했습니다.`);
   },
@@ -1331,7 +1372,7 @@ Object.assign(Forms, {
     const rec = { type, d, amt, cat, memo: String(fd.get('memo') || '').trim(), ...(tm ? { tm } : {}) };
     if (id) { const x = S.flows.find(y => y.id === id); if (!x) return gone(); Object.assign(x, rec); if (!tm) delete x.tm; }
     else S.flows.push(Object.assign({ id: uid(), t: Date.now() }, rec));
-    UI.month = d.slice(0, 7); dlg.close(); commit(id ? '저장했습니다.' : '추가했습니다.');
+    UI.month = d.slice(0, 7); UI.year = d.slice(0, 4); dlg.close(); commit(id ? '저장했습니다.' : '추가했습니다.');
   },
   settings(f, fd) {
     const auto = fd.get('fxAuto') === 'on';
